@@ -2,3 +2,8 @@ bin/**
 obj/**
 src/**
 *.zip
+*.*.swp
+*.*.swn
+*.*.swo
+*.*.swm
+*~

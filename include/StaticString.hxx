@@ -7,6 +7,7 @@
 #include <Range.hxx>
 #include <StringDetails.hxx>
 
+
 template<size_t Tsize>
 class StaticString
 {
@@ -30,13 +31,13 @@ public:
 	// Serve for the sole purpose of begin able to be literal type even with default constructor
 	constexpr StaticString() : str_{}, actualSize_{}
 	{}
-	constexpr StaticString(const StaticString& other) : str_{other.str_}, actualSize_{other.actualSize_}
+	constexpr StaticString(const StaticString& other) : str_{other.rawData()}, actualSize_{other.size()}
 	{
 		//static_assert(otherSize <= Tsize, "The string used to initialize the StaticString do not fit !");
 	}
 	
 	template<size_t otherSize>
-	constexpr StaticString(const StaticString<otherSize>& other) : str_{other.str_}, actualSize_{other.actualSize_}
+	constexpr StaticString(const StaticString<otherSize>& other) : str_{other.rawData()}, actualSize_{other.size()}
 	{
 		static_assert(otherSize <= Tsize, "The string used to initialize the StaticString do not fit !");
 	}
@@ -111,6 +112,11 @@ public:
 	constexpr char* data()
 	{
 		return &str_[0];
+	}
+
+	constexpr auto rawData() const
+	{
+		return str_;
 	}
 	
 	constexpr void resize(size_t newSize) noexcept
