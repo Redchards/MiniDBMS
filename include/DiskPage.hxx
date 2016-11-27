@@ -62,6 +62,35 @@ class DiskPageHeader
 		return schemaName_;
 	}
 
+	size_type getFreeSlotCount() const noexcept
+	{
+		return freeSlotCount_;
+	}
+
+	void decreaseFreeSlotCount(size_type val) const noexcept
+	{
+		Ensures(freeSlotCount_ >= val);
+
+		freeSlotCount_ -= val;
+	}
+
+	void increaseFreeSlotCount(size_type val) const noexcept
+	{
+		Ensures((freeSlotCount_ + val) <= pageSize_);
+
+		freeSlotCount_ += val;
+	}
+
+	void decrementFreeSlotCount() const noexcept
+	{
+		decreaseFreeSlotCount(1);
+	}
+
+	void incrementFreeSlotCount() const noexcept
+	{
+		incrementFreeSlotCount(1);
+	}
+
 	bool isFull() const noexcept
 	{
 		return (freeSlotCount_ == 0);
@@ -124,7 +153,12 @@ class DiskPage
 		return index_;
 	}
 
-	std::string getSchemaName() const noexcept
+	size_type getFreeSlotCoutn() const noexcept
+	{
+		return header_.getFreeSlotCount();
+	}
+
+	const std::string& getSchemaName() const noexcept
 	{
 		return header_.getSchemaName();
 	}
@@ -146,8 +180,9 @@ class DiskPage
 
 	void remove(size_type index) const noexcept
 	{
-		data_[index] = false;
 		markDirty();
+		frameIndicators_[index] = true;
+		header_.incrementFreeSlotCount();
 	}
 
 	bool isFree(size_type index) const noexcept
@@ -163,6 +198,8 @@ class DiskPage
 		{
 			replace(*freeIndex, entry);
 			markDirty();
+			frameIndicators_[*freeIndex] = false;
+			header_.decrementFreeSlotCount();
 
 			return true;
 		}
