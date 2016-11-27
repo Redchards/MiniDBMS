@@ -25,13 +25,15 @@ class DbSchema
 	DbSchema(std::string name, const std::vector<FieldDescriptor>& internal) 
 	: name_{name}, 
 	  internal_{internal},
-	  size_{computeSize()}
+	  size_{computeSize()},
+	  dataSize_{computeDataSize()}
 	{}
 	
 	DbSchema(std::string name, std::vector<FieldDescriptor>&& internal) 
 	: name_{name}, 
 	  internal_{std::move(internal)},
-	  size_{computeSize()}
+	  size_{computeSize()},
+	  dataSize_{computeDataSize()}
 	{}
 
 	
@@ -56,10 +58,27 @@ class DbSchema
 		return space;
 	}
 
+	size_type computeDataSize() const noexcept
+	{
+		size_type size = 0;
+
+		for(auto& elem : internal_)
+		{
+			size += elem.type.getSize();
+		}
+
+		return size;
+	}
+
 	public:
 	size_type getSize() const noexcept
 	{
 		return size_;
+	}
+
+	size_type getDataSize() const noexcept
+	{
+		return dataSize_;
 	}
 	
 	size_type getFieldCount() const noexcept
@@ -89,6 +108,7 @@ class DbSchema
 	std::string name_;
 	std::vector<FieldDescriptor> internal_;
 	size_type size_;
+	size_type dataSize_;
 
 	static constexpr size_type nameLengthFieldSize = 2;
 };

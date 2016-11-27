@@ -24,7 +24,7 @@ public:
 
 };
 
-template<Endianess endian = Endianess::little>
+template<Endianness endian = Endianness::little>
 class FileValueWriter : public FileValueWriterBase
 {
 	

@@ -37,7 +37,7 @@ public:
 	std::string readString();
 };
 
-template<Endianess endian>
+template<Endianness endian>
 class FileValueReader : public FileValueReaderBase
 {
 public:
@@ -62,6 +62,6 @@ public:
 	}
 };
 
-using FileReader = FileValueReader<Endianess::little>;
+using FileReader = FileValueReader<Endianness::little>;
 
 #endif // FILE_VALUE_READER_HXX

@@ -15,7 +15,7 @@ typedef uint16_t flag_type;
 #define stringify(x) stringify_(x)
 #define stringify_(x) #x
 
-enum class Endianess : flag_type
+enum class Endianness : flag_type
 {
 	little,
 	big

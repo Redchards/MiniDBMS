@@ -64,7 +64,7 @@ class DataTypeDescriptor
 		return modifier_;
 	}
 
-	size_t getSize() const noexcept
+	size_type getSize() const noexcept
 	{
 		size_t result = modifier_;
 

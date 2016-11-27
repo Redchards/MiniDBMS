@@ -17,6 +17,7 @@
 #include <DbEntry.hxx>
 #include <tuple>
 #include <DiskPage.hxx>
+#include <PageSerializer.hxx>
 
 static constexpr ConstString exprBegin = "const char *CTTI::GetTypeName() [T = ";
 static constexpr ConstString exprEnd = "] ";
@@ -112,21 +113,21 @@ int main()
 {
     std::vector<uint8_t> vevec{16, 0};
 	std::vector<uint8_t> dateVec{16, 2, 7, 224};
-	Utils::RawDataAdaptator<size_type, sizeof(size_type), Endianess::big> tt2{4};
+	Utils::RawDataAdaptator<size_type, sizeof(size_type), Endianness::little> tt2{4};
 	std::cout << (int)tt2.bytes[0] << std::endl;
     
-    std::cout << Utils::RawDataConverter<Endianess::big>::rawDataToInteger(vevec.begin(), vevec.end()) << std::endl;
-    std::cout << Utils::RawDataConverter<Endianess::little>::rawDataToInteger(vevec.begin(), vevec.end()) << std::endl;
+    std::cout << Utils::RawDataConverter<Endianness::big>::rawDataToInteger(vevec.begin(), vevec.end()) << std::endl;
+    std::cout << Utils::RawDataConverter<Endianness::little>::rawDataToInteger(vevec.begin(), vevec.end()) << std::endl;
     
-    Utils::rawDataSwitchEndianess(vevec);
+    Utils::rawDataSwitchEndianness(vevec);
     for(auto elem : vevec)
     {
         std::cout << (int)elem << std::endl;
     }
-	std::cout << Utils::RawDataStringizer<Endianess::big>::stringize(dateVec.begin(), dateVec.end(), DataTypeDescriptor{DataType::DATE}) << std::endl;
+	std::cout << Utils::RawDataStringizer<Endianness::big>::stringize(dateVec.begin(), dateVec.end(), DataTypeDescriptor{DataType::DATE}) << std::endl;
 	
 	std::vector<DbSchema> schList;
-	static constexpr Endianess usedEndianess = Endianess::little;
+	static constexpr Endianness usedEndianness = Endianness::big;
     
     schList.push_back({"Book", {
         {"Title",  {DataType::CHARACTER, 10}},
@@ -146,14 +147,14 @@ int main()
 	}});
     DataType tt = DataType::DATE;
 	std::cout << tt.toString() << std::endl;
-	FileValueWriter<usedEndianess> writer{"db.sch"};
+	FileValueWriter<usedEndianness> writer{"db.sch"};
 	for(auto& schema : schList)
 	{
-    	auto serialData = DbSchemaSerializer<usedEndianess>::serialize(schema);
+    	auto serialData = DbSchemaSerializer<usedEndianness>::serialize(schema);
 		writer.write(serialData);
 	}
 	writer.unloadFile();
-	FileValueReader<usedEndianess> reader{"db.sch"};
+	FileValueReader<usedEndianness> reader{"db.sch"};
 	while(!reader.eof()) {
 		std::vector<uint8_t> serialData;
 		auto readed = reader.readValue(8);
@@ -165,7 +166,7 @@ int main()
 		for(auto elem : serialData){ std::cout << elem << "- "; }
 		std::cout << std::endl;
     	std::cout << "Size : " << serialData.size() << std::endl;
-    	auto schema2 = DbSchemaSerializer<usedEndianess>::deserialize(serialData.begin(), serialData.end());
+    	auto schema2 = DbSchemaSerializer<usedEndianness>::deserialize(serialData.begin(), serialData.end());
  	    for(size_type i = 0; i < schema2.getFieldCount(); ++i)
 		{
         	std::cout << schema2[i].name << " : " << schema2[i].type.toString() <<  std::endl;
@@ -181,20 +182,35 @@ int main()
 	vecTst.insert(vecTst.end(), blip.begin(), blip.end());
 	vecTst.push_back(16);vecTst.push_back(2);vecTst.push_back(7);vecTst.push_back(224);
 	for(auto byte : vecTst){std::cout << byte << " ";}
-	std::cout << DbEntry<Endianess::big>{schList[0], vecTst}.toString() << std::endl;
+	std::cout << DbEntry<Endianness::big>{schList[0], vecTst}.toString() << std::endl;
 
 	bool end = false;
 	auto schemaUsed = schList[2];
 
 	std::vector<uint8_t> dummyDiskData{
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        45, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
+        0, 0, 0, 0, 0, 0, 0, 2,
 		'R', 'u', 'n', 'n', 'e', 'r', '\0',
-		45, 0, 0, 0, 0, 0, 0, 0
-		};
+		0, 0, 0, 0, 0, 0, 0, 2,
+		0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+	};		
 		
-		
-	DiskPageHeader<usedEndianess> h{dummyDiskData};
+	DiskPage<usedEndianness> h{0, dummyDiskData};
+	auto h2 = PageSerializer<usedEndianness>::serializeHeader(h);
+
+	for(auto df : h2)
+	{
+		std::cout << (int)df << " ";
+	}
+	std::cout << std::endl;
 
 	std::cout << "Next offset : " << h.getNextPageOffset() << std::endl;
 	std::cout << "Page size : " << h.getPageSize() << std::endl;
@@ -209,6 +225,7 @@ int main()
 		std::cout << "- a : ajouter une entrée\n";
 		std::cout << "- b : supprimer une entrée\n";
 		std::cout << "- c : modifier une entrée\n";
+		std::cout << "- q : quitter\n";
 		std::cin >> ans;
 
 		if(ans == 'a')
@@ -223,7 +240,7 @@ int main()
 				{
 					size_type t;
 					std::cin >> t;
-					Utils::RawDataAdaptator<size_type, sizeof(size_type), usedEndianess> adapt{t};
+					Utils::RawDataAdaptator<size_type, sizeof(size_type), usedEndianness> adapt{t};
 					data.insert(data.end(), adapt.bytes.begin(), adapt.bytes.end());
 					usedBytes = field.type.getSize();
 				}
@@ -231,7 +248,7 @@ int main()
 				{
 					float t;
 					std::cin >> t;
-					Utils::RawDataAdaptator<float, sizeof(float), Endianess::little> adapt{t};
+					Utils::RawDataAdaptator<float, sizeof(float), Endianness::little> adapt{t};
 					data.insert(data.end(), adapt.bytes.begin(), adapt.bytes.end());
 					usedBytes = field.type.getSize();
 				}
@@ -240,7 +257,7 @@ int main()
 				{
 					double t;
 					std::cin >> t;
-					Utils::RawDataAdaptator<double, sizeof(double), Endianess::little> adapt{t};
+					Utils::RawDataAdaptator<double, sizeof(double), Endianness::little> adapt{t};
 					data.insert(data.end(), adapt.bytes.begin(), adapt.bytes.end());
 					usedBytes = field.type.getSize();
 				}
@@ -263,9 +280,25 @@ int main()
 			{
 				std::cout << (int)d << " ";
 			}
-			DbEntry<usedEndianess> newEntry{schemaUsed, data};
+			DbEntry<usedEndianness> newEntry{schemaUsed, data};
+			h.add(newEntry);
 			std::cout << newEntry.toString() << std::endl;
 		}
+		else if(ans == 'q')
+		{
+			end = true;
+		}
+	}
+
+	for(int i = 0; i < 2; ++i)
+	{
+		std::vector<uint8_t> vTest{h.getData().begin() + i*schemaUsed.getDataSize(), h.getData().begin() + (i+1)*schemaUsed.getDataSize()};
+			for(auto d : vTest)
+			{
+				std::cout << (int)d << " ";
+			}
+		DbEntry<usedEndianness> ent{schemaUsed, vTest};
+		std::cout << ent.toString() << std::endl;
 	}
 	
 	std::cout << std::endl;

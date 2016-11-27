@@ -39,7 +39,7 @@ auto makeArray(Iterator begin, Iterator end)
 }
 
 template<class Iterator>
-static void rawDataSwitchEndianess(Iterator begin, Iterator end)
+static void rawDataSwitchEndianness(Iterator begin, Iterator end)
 {
 	static_assert(std::is_convertible<typename std::iterator_traits<Iterator>::value_type, uint8_t>::value 
 				  || std::is_convertible<typename std::iterator_traits<Iterator>::value_type, int8_t>::value,
@@ -56,25 +56,25 @@ static void rawDataSwitchEndianess(Iterator begin, Iterator end)
 template<class Iterator>
 static void rawDataSwitchEndiness(range<Iterator>& rg)
 {
-	rawDataSwitchEndianess(rg.begin(), rg.end());
+	rawDataSwitchEndianness(rg.begin(), rg.end());
 }
 
 template<class Container>
-static void rawDataSwitchEndianess(Container& cont)
+static void rawDataSwitchEndianness(Container& cont)
 {
-	rawDataSwitchEndianess(cont.begin(), cont.end());
+	rawDataSwitchEndianness(cont.begin(), cont.end());
 }
 	
-template<class T, size_type N, Endianess endian = Endianess::little>
+template<class T, size_type N, Endianness endian = Endianness::little>
 union RawDataAdaptator
 {
-	static_assert(N <= sizeof(size_type), 
-				 "The adaptator structure size must not exceed the size of size_type");
+	static_assert(N <= sizeof(std::streampos),
+				 "The adaptator structure size must not exceed the size of std::streampos");
 
 	public:
 	RawDataAdaptator(std::array<uint8_t, N> arr) : bytes{ arr }
 	{
-		rawDataSwitchEndianess(bytes);
+		rawDataSwitchEndianness(bytes);
 	}
 
 	template<class Iterator>
@@ -84,7 +84,7 @@ union RawDataAdaptator
 					  || std::is_convertible<typename std::iterator_traits<Iterator>::value_type, int8_t>::value,
 					  "The underlying type must be convertible to a byte (uint8_t for instance)");
 		
-		rawDataSwitchEndianess(bytes);
+		rawDataSwitchEndianness(bytes);
 	}
 	
 	RawDataAdaptator(T val) : value{ val }
@@ -99,10 +99,10 @@ union RawDataAdaptator
 };
 
 template<class T, size_type N>
-union RawDataAdaptator<T, N, Endianess::big>
+union RawDataAdaptator<T, N, Endianness::big>
 {
-	static_assert(N <= sizeof(size_type),
-				 "The adaptator structure size must not exceed the size of size_type");
+	static_assert(N <= sizeof(std::streampos),
+				 "The adaptator structure size must not exceed the size of std::streampos");
 
 	public:
 	RawDataAdaptator(std::array<uint8_t, N> arr) : bytes{ arr }
@@ -118,7 +118,7 @@ union RawDataAdaptator<T, N, Endianess::big>
 
 	RawDataAdaptator(T val) : value{ val }
 	{
-		rawDataSwitchEndianess(bytes);
+		rawDataSwitchEndianness(bytes);
 	}
 
 	std::array<uint8_t, N> bytes;
@@ -167,11 +167,11 @@ auto reverseIterator(Iterable cont)
 	return ReverseIteratorAdaptator<Iterable>{cont};
 }
 
-template<Endianess>
-class EndianessRangeIteratorSelector;
+template<Endianness>
+class EndiannessRangeIteratorSelector;
 
 template<>
-class EndianessRangeIteratorSelector<Endianess::little>
+class EndiannessRangeIteratorSelector<Endianness::little>
 {
 
 public:
@@ -183,7 +183,7 @@ public:
 };
 
 template<>
-class EndianessRangeIteratorSelector<Endianess::big>
+class EndiannessRangeIteratorSelector<Endianness::big>
 {
 
 public:
@@ -196,7 +196,7 @@ public:
 
 
 
-template<Endianess endian>
+template<Endianness endian>
 class RawDataConverter
 {
 
@@ -215,7 +215,7 @@ public:
 
 		size_type out = 0;
 		uint8_t offset = 0;
-		for(auto byte : EndianessRangeIteratorSelector<endian>::select(rg))
+		for(auto byte : EndiannessRangeIteratorSelector<endian>::select(rg))
 		{
 			std::cout << "b : " <<(int)byte << std::endl;
 			out |= (byte << (offset * 8));
@@ -251,7 +251,7 @@ public:
 
 		std::streampos out = 0;
 		uint8_t offset = 0;
-		for(auto byte : EndianessRangeIteratorSelector<endian>::select(rg))
+		for(auto byte : EndiannessRangeIteratorSelector<endian>::select(rg))
 		{
 			std::cout << "b : " <<(int)byte << std::endl;
 			out = out | (byte << (offset * 8));
@@ -310,7 +310,7 @@ private:
 	const std::string msg_;
 };
 
-template<Endianess endian>
+template<Endianness endian>
 class RawDataStringizer
 {
 	public:

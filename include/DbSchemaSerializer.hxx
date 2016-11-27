@@ -9,11 +9,11 @@
 
 #include <vector>
 
-template<Endianess endian>
+template<Endianness endian>
 class DbSchemaSerializerBase;
 
 
-template<Endianess endian>
+template<Endianness endian>
 class DbSchemaSerializer// : public DbSchemaSerializerBase<endian>
 {
 	
@@ -69,7 +69,7 @@ class DbSchemaSerializer// : public DbSchemaSerializerBase<endian>
 	static DbSchema deserialize(Iterator begin, Iterator end)
 	{
 		static_assert(std::is_convertible<typename std::iterator_traits<Iterator>::value_type, uint8_t>::value
-				   || std::is_convertible<typename std::iterator_traits<Iterator>::value_type, int8_t>::value 
+				   || std::is_convertible<typename std::iterator_traits<Iterator>::value_type, int8_t>::value,
 			     	  "The underlying type must be convertible to a byte (uint8_t for instance)");
 		
 		using DataConverter = Utils::RawDataConverter<endian>;

@@ -6,7 +6,7 @@
 #include <vector>
 
 /* WARNING : The DbSchema must be persistent, should it be destroyed at on point, the DbEntry would become unusable */
-template<Endianess endian>
+template<Endianness endian>
 class DbEntry
 {
 public:
@@ -21,7 +21,7 @@ public:
 		static_assert(std::is_convertible<T, char>::value || std::is_convertible<T, unsigned char>::value,
 					 "The data type must be convertible to a type with byte size.");
 
-		storage_.reserve(schema.getSize());
+		storage_.resize(schema.getDataSize());
 		std::copy(data.begin(), data.end(), storage_.begin());
 	}
 
@@ -48,11 +48,6 @@ public:
 	const std::vector<uint8_t>& getRawData() const noexcept
 	{
 		return storage_;
-	}
-
-	size_t getSize() const noexcept
-	{
-		return schema_.getSize();
 	}
 
 	const DbSchema& getSchema() const noexcept

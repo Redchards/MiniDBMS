@@ -20,7 +20,7 @@
  * interesting if we effectively load the page inside the main memory.
  * This class is mainly used to check if a page is full before even loading it fully into the main memory.
  */
-template<Endianess endian>
+template<Endianness endian>
 class DiskPageHeader
 {
 	public:
@@ -67,26 +67,26 @@ class DiskPageHeader
 		return freeSlotCount_;
 	}
 
-	void decreaseFreeSlotCount(size_type val) const noexcept
+	void decreaseFreeSlotCount(size_type val) noexcept
 	{
 		Ensures(freeSlotCount_ >= val);
 
 		freeSlotCount_ -= val;
 	}
 
-	void increaseFreeSlotCount(size_type val) const noexcept
+	void increaseFreeSlotCount(size_type val) noexcept
 	{
 		Ensures((freeSlotCount_ + val) <= pageSize_);
 
 		freeSlotCount_ += val;
 	}
 
-	void decrementFreeSlotCount() const noexcept
+	void decrementFreeSlotCount() noexcept
 	{
 		decreaseFreeSlotCount(1);
 	}
 
-	void incrementFreeSlotCount() const noexcept
+	void incrementFreeSlotCount() noexcept
 	{
 		incrementFreeSlotCount(1);
 	}
@@ -117,7 +117,7 @@ class DiskPageHeader
 	size_type freeSlotCount_;
 };
 
-template<Endianess endian>
+template<Endianness endian>
 class DiskPage
 {
 	using PageIndex = size_type;
@@ -143,7 +143,7 @@ class DiskPage
 		return header_.getPageSize();
 	}
 	
-	size_type getNextPageOffset() const noexcept
+	std::streampos getNextPageOffset() const noexcept
 	{
 		return header_.getNextPageOffset();
 	}
@@ -153,7 +153,7 @@ class DiskPage
 		return index_;
 	}
 
-	size_type getFreeSlotCoutn() const noexcept
+	size_type getFreeSlotCount() const noexcept
 	{
 		return header_.getFreeSlotCount();
 	}
@@ -173,15 +173,20 @@ class DiskPage
 		return header_.isFull();
 	}
 
+	const std::vector<bool>& getFrameIndicators() const noexcept
+	{
+		return frameIndicators_;
+	}
+
 	const std::vector<uint8_t>& getData() const noexcept
 	{
 		return data_;
 	}
 
-	void remove(size_type index) const noexcept
+	void remove(size_type index) noexcept
 	{
 		markDirty();
-		frameIndicators_[index] = true;
+		frameIndicators_[index] = false;
 		header_.incrementFreeSlotCount();
 	}
 
@@ -190,7 +195,7 @@ class DiskPage
 		return !frameIndicators_[index];
 	}
 
-	bool add(const DbEntry<endian>& entry) const noexcept
+	bool add(const DbEntry<endian>& entry)noexcept
 	{
 		auto freeIndex = findFreeIndex();
 
@@ -198,7 +203,7 @@ class DiskPage
 		{
 			replace(*freeIndex, entry);
 			markDirty();
-			frameIndicators_[*freeIndex] = false;
+			frameIndicators_[*freeIndex] = true;
 			header_.decrementFreeSlotCount();
 
 			return true;
@@ -207,12 +212,16 @@ class DiskPage
 		return false;
 	}
 
-	void replace(size_type index, const DbEntry<endian>& entry) const noexcept
+	void replace(size_type index, const DbEntry<endian>& entry) noexcept
 	{
 		Ensures(entry.getSchema().getName() == getSchemaName());
 
 		auto rawData = entry.getRawData();
-		std::move(rawData.begin(), rawData.end(), data_.begin() + (index * entry.getSize));
+		std::copy(rawData.begin(), rawData.end(), data_.begin() + (index * rawData.size()));
+		std::cout << "SSSSS : " << data_.size()  << " : " << rawData.size() << " : " << (index * rawData.size()) << std::endl;
+		/*std::cout << "DDD " << rawData.size() << std::endl;
+		for(auto d : rawData)
+		{ std::cout << (int)d << " ";}*/
 		markDirty();
 	}
 
@@ -222,7 +231,7 @@ class DiskPage
 	{
 		for(size_type i = 0; i < frameIndicators_.size(); ++i)
 		{
-			if(isFree(i)) return i;
+			if(isFree(i)){ return i; }
 		}
 		return {};
 	}
