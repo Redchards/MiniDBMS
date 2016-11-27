@@ -7,6 +7,8 @@
 #include <DiskPage.hxx>
 #include <LRUPageReplacePolicy.hxx>
 #include <Meta.hxx>
+#include <PageReader.hxx>
+#include <PageWriter.hxx>
 
 #include <mutex>
 #include <thread>
@@ -14,8 +16,8 @@
 
 enum class PageType : uint8_t
 {
-	NonModifiable,
-	Modifiable
+	ReadOnly,
+	Writable
 };
 
 class BufferManager
@@ -28,20 +30,22 @@ class BufferManager
 	using DefaultPolicy = LRUPageReplacePolicy;
 
 	public:
-	BufferManager()
+	BufferManager(const std::string& dbFileName)
 	: bufferPool_{defaultBufferSize},
 	  pinCountList_{},
 	  replacePolicy_{new DefaultPolicy()},
 	  bufferPagePosition_{},
-	  mut_{}
+	  pgReader_{dbFileName},
+	  pgWriter_{dbFileName}
 	{}
 
-	BufferManager(size_type bufferSize)
+	BufferManager(const std::string& dbFileName, size_type bufferSize)
 	: bufferPool_{bufferSize},
 	  pinCountList_{},
 	  replacePolicy_{new DefaultPolicy()},
 	  bufferPagePosition_{},
-	  mut_{}
+	  pgReader_{dbFileName},
+	  pgWriter_{dbFileName}
 	{}
 
 	/* Functions to pin and unpin pages.
@@ -76,27 +80,9 @@ class BufferManager
 	}
 
 	template<PageType type>
-	DiskPage& requestPage(const std::string& schemaName)
+	DiskPage& requestPage(const DbSchema& schema)
 	{
-		return requestPageAux(schemaName);
-	}
-
-	template<>
-	const DiskPage& requestPage<PageType::NonModifiable>(const std::string& schemaName)
-	{
-		return requestPageAux(schemaName);
-	}
-
-	private:
-
-	void performPageReplace(const std::string& schemaName)
-	{
-		auto candidatePageId = replacePolicy_->getCandidate(schemaName);
-	}
-
-	DiskPage& requestPageAux(const std::string& schemaName)
-	{
-		auto candidatePageIt = firstAvailablePageOffset_.find(schemaName);
+		auto candidatePageIt = firstAvailablePageOffset_.find(schema.getName());
 
 		if(candidatePageIt != firstAvailablePageOffset_.end())
 		{
@@ -108,14 +94,28 @@ class BufferManager
 			}
 			else
 			{
-				performPageReplace(schemaName);
-				return requestPage(schemaName);
+				performPageReplace(schema.getName());
+				return requestPage(schema.getName());
 			}
 		}
 		else
 		{
-			createNewPage(schemaName);
+			bufferPool_
 		}
+	}
+
+	/*template<>
+	const DiskPage& requestPage<PageType::NonModifiable>(const std::string& schemaName)
+	{
+		return requestPageAux(schemaName);
+	}*/
+
+	private:
+
+	void performPageReplace(const std::string& schemaName)
+	{
+		auto candidatePageId = replacePolicy_->getCandidate(schemaName);
+		pgReader
 	}
 
 	std::vector<DiskPage> bufferPool_;
@@ -127,7 +127,8 @@ class BufferManager
 	 * However, they may be no such page, in which case firstAvailablePageOffset_[schemaName] will return the "end" iterator */
 	std::unordered_map<std::string, std::streamoff> firstAvailablePageOffset_;
 
-	std::mutex mut_;
+	PageReader<endian> pgReader_;
+	PageWriter<endian> pgWriter_;
 };
 
 #endif // BUFFER_MANAGER_HXX

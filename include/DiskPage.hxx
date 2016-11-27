@@ -48,6 +48,18 @@ class DiskPageHeader
 		freeSlotCount_ = Utils::RawDataConverter<endian>::rawDataToInteger(it, it + sizeof(decltype(freeSlotCount_)));
 	}
 
+	DiskPageHeader(std::streamoff nextPageOffset, size_type elemSize, size_type pageSize, const std::string& schemaName, size_type freeSlotCount)
+	: nextPageOffset_{nextPageOffset},
+	  rawPageSize_{},
+	  headerSize_{},
+	  pageSize_{pageSize},
+	  schemaName_{schemaName},
+	  freeSlotCount_{freeSlotCount}
+	{
+		rawPageSize_ = getSize() + (elemSize * pageSize);
+		headerSize_ = getSize();
+	}
+
 	DiskPageHeader(const DiskPageHeader& other)
 	: pageSize_{other.pageSize_},
 	  nextPageOffset_{other.nextPageOffset_},
@@ -60,9 +72,14 @@ class DiskPageHeader
 		return pageSize_;
 	}
 	  
-	size_type getNextPageOffset() const noexcept
+	std::streamoff getNextPageOffset() const noexcept
 	{
 		return nextPageOffset_;
+	}
+
+	void setNextPageOffset(std::streamoff newOffset) const noexcept
+	{
+		nextPageOffset_ = newOffset;
 	}
 	
 	const std::string& getSchemaName() const noexcept
@@ -114,7 +131,7 @@ class DiskPageHeader
 		return (freeSlotCount_ == 0);
 	}
 
-	size_type getSize() const noexcept
+	uint32_t getSize() const noexcept
 	{
 		return (sizeof(decltype(nextPageOffset_))
 			  + sizeof(decltype(pageSize_))
@@ -163,12 +180,19 @@ class DiskPage
 	  dirtyFlag_{false}
 	{
 		auto it = data.begin() + header_.getSize();
-		std::cout << "Bddd : " << (int)Details::difference(data.begin(), it) << std::endl;
 		frameIndicators_ = std::vector<bool>{it, it + header_.getPageSize()};
 		it += header_.getPageSize();
 
 		data_ = std::vector<uint8_t>{it, data.end()};
 	}
+
+	DiskPage(PageIndex index, const DbSchema& schema, size_type pageSize)
+	: header_{0, schema.getDataSize(), pageSize, schema.getName(), pageSize},
+	  index_{index},
+	  dirtyFlag_{false},
+	  frameIndicators_(pageSize, false),
+	  data_(pageSize * schema.getDataSize(), 0) 
+	{}
 
 	size_type getPageSize() const noexcept
 	{
@@ -260,11 +284,16 @@ class DiskPage
 
 		auto rawData = entry.getRawData();
 		std::copy(rawData.begin(), rawData.end(), data_.begin() + (index * rawData.size()));
-		std::cout << "SSSSS : " << data_.size()  << " : " << rawData.size() << " : " << (index * rawData.size()) << std::endl;
+		//std::cout << "SSSSS : " << data_.size()  << " : " << rawData.size() << " : " << (index * rawData.size()) << std::endl;
 		/*std::cout << "DDD " << rawData.size() << std::endl;
 		for(auto d : rawData)
 		{ std::cout << (int)d << " ";}*/
 		markDirty();
+	}
+
+	void linkTo(std::streamoff offset) noexcept
+	{
+		header_.setNextPageOffset(offset);
 	}
 
 	private:

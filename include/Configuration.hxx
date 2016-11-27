@@ -4,11 +4,7 @@
 
 #include <Platform.hxx>
 
-#ifdef X86
-	typedef unsigned long size_type;
-#else
-	typedef std::size_t size_type;
-#endif
+typedef uint64_t size_type;
 
 typedef uint16_t flag_type;
 

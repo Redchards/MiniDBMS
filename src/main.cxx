@@ -207,7 +207,8 @@ int main()
 		0, 0, 0, 0, 0, 0, 0, 0,
 	};		
 		
-	DiskPage<usedEndianness> h{0, dummyDiskData};
+	DiskPage<usedEndianness> h21{0, dummyDiskData};
+	DiskPage<usedEndianness> h{0, schemaUsed, 50};
 	auto h2 = PageSerializer<usedEndianness>::serializeHeader(h);
 
 	for(auto df : h2)
@@ -222,6 +223,7 @@ int main()
 	std::cout << "Is Full ? " << h.isFull() << std::endl;
 	std::cout << "Raw page size : " << h.getRawPageSize() << std::endl;
 	std::cout << "Header size : " << h.getHeaderSize() << std::endl;
+	std::cout << "Data suze : " << h.getData().size() << std::endl;
 
 	while(!end)
 	{
@@ -304,7 +306,7 @@ int main()
 
 	// DiskPage<usedEndianness> rdPg{0, h.getData()};
 
-	for(int i = 0; i < 2; ++i)
+	for(int i = 0; i < 4; ++i)
 	{
 		std::vector<uint8_t> vTest{rdPg.getData().begin() + i*schemaUsed.getDataSize(), rdPg.getData().begin() + (i+1)*schemaUsed.getDataSize()};
 			for(auto d : vTest)

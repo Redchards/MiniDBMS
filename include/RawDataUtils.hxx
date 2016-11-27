@@ -256,9 +256,6 @@ public:
 			std::cout << "b : " <<(int)byte << std::endl;
 
 			out = out | ((std::streamoff)byte << (offset * 8));
-			std::cout << std::hex << out;
-			std::cout << "d : " << out << " : " << (int)offset << " : " << (((std::streamoff)byte) << (offset * 8)) << " : " << (int)byte << std::endl;
-			std::cout << (int)byte << std::endl;
 			++offset;
 		}
 
