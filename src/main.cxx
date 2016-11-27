@@ -127,7 +127,7 @@ int main()
 	std::cout << Utils::RawDataStringizer<Endianness::big>::stringize(dateVec.begin(), dateVec.end(), DataTypeDescriptor{DataType::DATE}) << std::endl;
 	
 	std::vector<DbSchema> schList;
-	static constexpr Endianness usedEndianness = Endianness::big;
+	static constexpr Endianness usedEndianness = Endianness::little;
     
     schList.push_back({"Book", {
         {"Title",  {DataType::CHARACTER, 10}},
@@ -188,17 +188,17 @@ int main()
 	auto schemaUsed = schList[2];
 
 	std::vector<uint8_t> dummyDiskData{
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
-        0, 0, 0, 0, 0, 0, 0, 2,
+		3, 4, 0, 0, 0, 0, 0, 0,
+        2, 0, 0, 0, 0, 0, 0, 0,
 		'R', 'u', 'n', 'n', 'e', 'r', '\0',
-		0, 0, 0, 0, 0, 0, 0, 2,
+		2, 0, 0, 0, 0, 0, 0, 0,
 		0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0,
 	};		
@@ -281,7 +281,7 @@ int main()
 				std::cout << (int)d << " ";
 			}
 			DbEntry<usedEndianness> newEntry{schemaUsed, data};
-			h.add(newEntry);
+			std::cout << std::boolalpha << h.add(newEntry) << std::endl;
 			std::cout << newEntry.toString() << std::endl;
 		}
 		else if(ans == 'q')
@@ -297,6 +297,10 @@ int main()
 			{
 				std::cout << (int)d << " ";
 			}
+		std::cout << std::endl << std::endl;
+		auto h3 = PageSerializer<usedEndianness>::serialize(h);
+		for(auto d : h3)
+	{std::cout << (int)d << " ";}
 		DbEntry<usedEndianness> ent{schemaUsed, vTest};
 		std::cout << ent.toString() << std::endl;
 	}

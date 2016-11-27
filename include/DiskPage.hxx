@@ -10,7 +10,7 @@
 #include <vector>
 
 /* Header format :
- * nextPageOffset (sizeof(std::streampos) bytes)
+ * nextPageOffset (sizeof(std::streamoff) bytes)
  * pageSize (sizeof(size_type) bytes)
  * schemaName (variant)
  * freeSlotCount (sizeof(size_type) bytes)
@@ -28,7 +28,7 @@ class DiskPageHeader
 	{
 		auto it = data.begin();
 
-		nextPageOffset_ = Utils::RawDataConverter<endian>::rawDataToStreampos(it, it + sizeof(decltype(nextPageOffset_)));
+		nextPageOffset_ = Utils::RawDataConverter<endian>::rawDataToStreamoff(it, it + sizeof(decltype(nextPageOffset_)));
 		it += sizeof(decltype(nextPageOffset_));
 
 		pageSize_ = Utils::RawDataConverter<endian>::rawDataToInteger(it, it + sizeof(decltype(pageSize_)));
@@ -96,6 +96,11 @@ class DiskPageHeader
 		return (freeSlotCount_ == 0);
 	}
 
+	size_type getSize() const noexcept
+	{
+		return (2 * sizeof(size_type)) + sizeof(std::streamoff) + schemaName_.size() + 1; // Count the null terminator.
+	}
+
 	private:
 	DataTypeDescriptor retrieveTypeDescriptor(const std::vector<uint8_t>& data) const noexcept
 	{
@@ -112,7 +117,7 @@ class DiskPageHeader
 	}
 
 	size_type pageSize_;
-	std::streampos nextPageOffset_;
+	std::streamoff nextPageOffset_;
 	std::string schemaName_;
 	size_type freeSlotCount_;
 };
@@ -130,7 +135,7 @@ class DiskPage
 	  index_{index},
 	  dirtyFlag_{false}
 	{
-		auto it = data.begin() + sizeof(DiskPageHeader<endian>);
+		auto it = data.begin() + header_.getSize();
 
 		frameIndicators_ = std::vector<bool>{it, it + header_.getPageSize()};
 		it += header_.getPageSize();
@@ -143,7 +148,7 @@ class DiskPage
 		return header_.getPageSize();
 	}
 	
-	std::streampos getNextPageOffset() const noexcept
+	std::streamoff getNextPageOffset() const noexcept
 	{
 		return header_.getNextPageOffset();
 	}

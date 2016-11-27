@@ -121,11 +121,11 @@ class BufferManager
 	std::vector<DiskPage> bufferPool_;
 	std::vector<size_type> pinCountList_;
 	std::unique_ptr<PageReplacePolicy> replacePolicy_;
-	std::unordered_map<std::streampos, size_type> bufferPagePosition_;
+	std::unordered_map<std::streamoff, size_type> bufferPagePosition_;
 
-	/* It is guaranteed that the page at the "std::streampos" will not be full.
+	/* It is guaranteed that the page at the "std::streamoff" will not be full.
 	 * However, they may be no such page, in which case firstAvailablePageOffset_[schemaName] will return the "end" iterator */
-	std::unordered_map<std::string, std::streampos> firstAvailablePageOffset_;
+	std::unordered_map<std::string, std::streamoff> firstAvailablePageOffset_;
 
 	std::mutex mut_;
 };

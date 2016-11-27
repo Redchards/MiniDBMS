@@ -68,8 +68,8 @@ static void rawDataSwitchEndianness(Container& cont)
 template<class T, size_type N, Endianness endian = Endianness::little>
 union RawDataAdaptator
 {
-	static_assert(N <= sizeof(std::streampos),
-				 "The adaptator structure size must not exceed the size of std::streampos");
+	static_assert(N <= sizeof(std::streamoff),
+				 "The adaptator structure size must not exceed the size of std::streamoff");
 
 	public:
 	RawDataAdaptator(std::array<uint8_t, N> arr) : bytes{ arr }
@@ -101,8 +101,8 @@ union RawDataAdaptator
 template<class T, size_type N>
 union RawDataAdaptator<T, N, Endianness::big>
 {
-	static_assert(N <= sizeof(std::streampos),
-				 "The adaptator structure size must not exceed the size of std::streampos");
+	static_assert(N <= sizeof(std::streamoff),
+				 "The adaptator structure size must not exceed the size of std::streamoff");
 
 	public:
 	RawDataAdaptator(std::array<uint8_t, N> arr) : bytes{ arr }
@@ -239,7 +239,7 @@ public:
 	}
 
 	template<class Iterator>
-	static std::streampos rawDataToStreampos(Iterator begin, Iterator end)
+	static std::streamoff rawDataToStreamoff(Iterator begin, Iterator end)
 	{
 		static_assert(std::is_convertible<typename std::iterator_traits<Iterator>::value_type, uint8_t>::value 
 				  || std::is_convertible<typename std::iterator_traits<Iterator>::value_type, int8_t>::value,
@@ -247,14 +247,17 @@ public:
 
 		range<Iterator> rg{begin, end};
 
-		Ensures(rg.size() <= sizeof(std::streampos));
+		Ensures(rg.size() <= sizeof(std::streamoff));
 
-		std::streampos out = 0;
-		uint8_t offset = 0;
+		std::streamoff out = 0;
+		size_type offset = 0;
 		for(auto byte : EndiannessRangeIteratorSelector<endian>::select(rg))
 		{
 			std::cout << "b : " <<(int)byte << std::endl;
-			out = out | (byte << (offset * 8));
+
+			out = out | ((std::streamoff)byte << (offset * 8));
+			std::cout << std::hex << out;
+			std::cout << "d : " << out << " : " << (int)offset << " : " << (((std::streamoff)byte) << (offset * 8)) << " : " << (int)byte << std::endl;
 			std::cout << (int)byte << std::endl;
 			++offset;
 		}
