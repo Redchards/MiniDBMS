@@ -3,19 +3,23 @@
 
 #include <Configuration.hxx>
 #include <DiskPage.hxx>
-#include <FileStream>
+#include <FileStream.hxx>
+#include <PageSerializer.hxx>
 
-template<Endianess endian>
-class PageWriter : protected FileStreamBase<endian>
+template<Endianness endian>
+class PageWriter : protected FileStreamBase<StreamGoal::write>
 {
-	using Base = FileStreamBase<endian>;
+	using Base = FileStreamBase<StreamGoal::write>;
 
 	public:
 	PageWriter(const std::string& fileName)
-	: Base(fileName)
+	: Base(fileName, std::ios_base::out | std::ios::binary)
 	{}
 
-	void writePage(
+	void writePage(const DiskPage<endian>& page, std::streampos pos)
+	{
+		this->write(PageSerializer<endian>::serialize(page), pos);
+	}
 };
 
 #endif // PAGE_WRITER_HXX

@@ -18,6 +18,7 @@
 #include <tuple>
 #include <DiskPage.hxx>
 #include <PageSerializer.hxx>
+#include <PageWriter.hxx>
 
 static constexpr ConstString exprBegin = "const char *CTTI::GetTypeName() [T = ";
 static constexpr ConstString exprEnd = "] ";
@@ -289,6 +290,9 @@ int main()
 			end = true;
 		}
 	}
+
+	PageWriter<usedEndianness> pgWriter("db");
+	pgWriter.writePage(h, 0);
 
 	for(int i = 0; i < 2; ++i)
 	{
