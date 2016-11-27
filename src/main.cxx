@@ -19,6 +19,7 @@
 #include <DiskPage.hxx>
 #include <PageSerializer.hxx>
 #include <PageWriter.hxx>
+#include <PageReader.hxx>
 
 static constexpr ConstString exprBegin = "const char *CTTI::GetTypeName() [T = ";
 static constexpr ConstString exprEnd = "] ";
@@ -190,6 +191,8 @@ int main()
 
 	std::vector<uint8_t> dummyDiskData{
 		3, 4, 0, 0, 0, 0, 0, 0,
+		0xa7, 0, 0, 0, 0, 0, 0, 0,
+		43, 0, 0, 0,
         2, 0, 0, 0, 0, 0, 0, 0,
 		'R', 'u', 'n', 'n', 'e', 'r', '\0',
 		2, 0, 0, 0, 0, 0, 0, 0,
@@ -217,6 +220,8 @@ int main()
 	std::cout << "Page size : " << h.getPageSize() << std::endl;
 	std::cout << "Schema name : " << h.getSchemaName() << std::endl;
 	std::cout << "Is Full ? " << h.isFull() << std::endl;
+	std::cout << "Raw page size : " << h.getRawPageSize() << std::endl;
+	std::cout << "Header size : " << h.getHeaderSize() << std::endl;
 
 	while(!end)
 	{
@@ -294,9 +299,14 @@ int main()
 	PageWriter<usedEndianness> pgWriter("db");
 	pgWriter.writePage(h, 0);
 
+	PageReader<usedEndianness> pgReader("db");
+	auto rdPg = pgReader.readPage(0, 0);
+
+	// DiskPage<usedEndianness> rdPg{0, h.getData()};
+
 	for(int i = 0; i < 2; ++i)
 	{
-		std::vector<uint8_t> vTest{h.getData().begin() + i*schemaUsed.getDataSize(), h.getData().begin() + (i+1)*schemaUsed.getDataSize()};
+		std::vector<uint8_t> vTest{rdPg.getData().begin() + i*schemaUsed.getDataSize(), rdPg.getData().begin() + (i+1)*schemaUsed.getDataSize()};
 			for(auto d : vTest)
 			{
 				std::cout << (int)d << " ";
@@ -309,7 +319,7 @@ int main()
 		std::cout << ent.toString() << std::endl;
 	}
 	
-	std::cout << std::endl;
+	std::cout << PageSerializer<usedEndianness>::serialize(h).size()<< std::endl;
 
     
     return 0;

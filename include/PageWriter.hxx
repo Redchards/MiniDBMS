@@ -6,6 +6,8 @@
 #include <FileStream.hxx>
 #include <PageSerializer.hxx>
 
+#include <string>
+
 template<Endianness endian>
 class PageWriter : protected FileStreamBase<StreamGoal::write>
 {
@@ -19,6 +21,7 @@ class PageWriter : protected FileStreamBase<StreamGoal::write>
 	void writePage(const DiskPage<endian>& page, std::streampos pos)
 	{
 		this->write(PageSerializer<endian>::serialize(page), pos);
+		this->flush();
 	}
 };
 

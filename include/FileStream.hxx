@@ -235,6 +235,11 @@ public:
 		}
 	}
 
+	void flush()
+	{
+		fstream_->flush();
+	}
+
 	std::streampos getCurrentPosition() const noexcept
 	{
 		return fstream_->tellp();

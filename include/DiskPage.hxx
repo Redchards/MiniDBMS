@@ -11,6 +11,8 @@
 
 /* Header format :
  * nextPageOffset (sizeof(std::streamoff) bytes)
+ * rawPageSize (sizeof(size_type) bytes)
+ * headerSize (sizeof(uint32_t) bytes)
  * pageSize (sizeof(size_type) bytes)
  * schemaName (variant)
  * freeSlotCount (sizeof(size_type) bytes)
@@ -30,6 +32,12 @@ class DiskPageHeader
 
 		nextPageOffset_ = Utils::RawDataConverter<endian>::rawDataToStreamoff(it, it + sizeof(decltype(nextPageOffset_)));
 		it += sizeof(decltype(nextPageOffset_));
+
+		rawPageSize_ = Utils::RawDataConverter<endian>::rawDataToInteger(it, it + sizeof(decltype(rawPageSize_)));
+		it += sizeof(decltype(rawPageSize_));
+
+		headerSize_ = Utils::RawDataConverter<endian>::rawDataToInteger(it, it + sizeof(decltype(headerSize_)));
+		it += sizeof(decltype(headerSize_));
 
 		pageSize_ = Utils::RawDataConverter<endian>::rawDataToInteger(it, it + sizeof(decltype(pageSize_)));
 		it += sizeof(decltype(pageSize_));
@@ -67,6 +75,16 @@ class DiskPageHeader
 		return freeSlotCount_;
 	}
 
+	size_type getRawPageSize() const noexcept
+	{
+		return rawPageSize_;
+	}
+
+	uint32_t getHeaderSize() const noexcept
+	{
+		return headerSize_;
+	}
+
 	void decreaseFreeSlotCount(size_type val) noexcept
 	{
 		Ensures(freeSlotCount_ >= val);
@@ -98,7 +116,13 @@ class DiskPageHeader
 
 	size_type getSize() const noexcept
 	{
-		return (2 * sizeof(size_type)) + sizeof(std::streamoff) + schemaName_.size() + 1; // Count the null terminator.
+		return (sizeof(decltype(nextPageOffset_))
+			  + sizeof(decltype(pageSize_))
+			  + sizeof(decltype(rawPageSize_))
+			  + sizeof(decltype(headerSize_))
+			  + schemaName_.size()
+			  + sizeof(decltype(freeSlotCount_)) + 1);  // Count the null terminator.
+		//return (3 * sizeof(size_type)) + sizeof(uint32_t) + sizeof(std::streamoff) + schemaName_.size() + 1;
 	}
 
 	private:
@@ -116,8 +140,10 @@ class DiskPageHeader
 		return {DataType::fromValue(dataTypeId), modifier};
 	}
 
-	size_type pageSize_;
 	std::streamoff nextPageOffset_;
+	size_type pageSize_;
+	size_type rawPageSize_;
+	uint32_t headerSize_;
 	std::string schemaName_;
 	size_type freeSlotCount_;
 };
@@ -125,6 +151,7 @@ class DiskPageHeader
 template<Endianness endian>
 class DiskPage
 {
+	public:
 	using PageIndex = size_type;
 
 	public:
@@ -136,7 +163,7 @@ class DiskPage
 	  dirtyFlag_{false}
 	{
 		auto it = data.begin() + header_.getSize();
-
+		std::cout << "Bddd : " << (int)Details::difference(data.begin(), it) << std::endl;
 		frameIndicators_ = std::vector<bool>{it, it + header_.getPageSize()};
 		it += header_.getPageSize();
 
@@ -168,6 +195,16 @@ class DiskPage
 		return header_.getSchemaName();
 	}
 	
+	size_type getRawPageSize() const noexcept
+	{
+		return header_.getRawPageSize();
+	}
+
+	uint32_t getHeaderSize() const noexcept
+	{
+		return header_.getHeaderSize();
+	}
+
 	bool isDirty() const noexcept
 	{
 		return dirtyFlag_;
