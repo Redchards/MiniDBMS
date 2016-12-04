@@ -10,7 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
+#include <iostream>
 enum class StreamGoal : flag_type
 {
 	read,
@@ -365,7 +365,7 @@ private:
 	{
 		if (!this->fstream_->good())
 		{
-			throw std::ios_base::failure((std::string("Error : failed to open the file ") + getCurrentFileName() + ". Please check that the file exists, and is a valid Win32 file !").c_str());
+			throw std::ios_base::failure((std::string("Error : failed to open the file ") + getCurrentFileName() + ". Please check that the file exists, and is a valid file !").c_str());
 		}
 		// So that stream will not interpret "whitespace" bytes as real whitespaces, and remove them.
 		this->fstream_->unsetf(std::ios::skipws);

@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-// Maybe should move all enums to Configuration.h header
+// Maybe should move all enums to Configuration.hxx header
 
 enum class BufferPolicy : flag_type
 {

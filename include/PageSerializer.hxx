@@ -10,7 +10,8 @@ template<Endianness endian>
 class PageSerializer
 {
 	public:
-	static std::vector<uint8_t> serializeHeader(const DiskPage<endian>& page) noexcept
+
+	static std::vector<uint8_t> serializeHeader(const DiskPageHeader<endian>& page) noexcept
 	{
 		// Should reserve something
 		std::vector<uint8_t> result;
@@ -39,14 +40,18 @@ class PageSerializer
 		Utils::RawDataAdaptator<freeSlotCountType, sizeof(freeSlotCountType), endian> freeSlotCountData{page.getFreeSlotCount()};
 		result.insert(result.end(), freeSlotCountData.bytes.begin(), freeSlotCountData.bytes.end());
 
-		result.insert(result.end(), page.getFrameIndicators().begin(), page.getFrameIndicators().end());
-
 		return result;
+	}
+
+	static std::vector<uint8_t> serializeHeader(const DiskPage<endian>& page) noexcept
+	{
+		return serializeHeader(page.getHeader());
 	}
 
 	static std::vector<uint8_t> serialize(const DiskPage<endian>& page) noexcept
 	{
 		std::vector<uint8_t> result{serializeHeader(page)};
+		result.insert(result.end(), page.getFrameIndicators().begin(), page.getFrameIndicators().end());
 		result.insert(result.end(), page.getData().begin(), page.getData().end());
 
 		return result;

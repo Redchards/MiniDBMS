@@ -9,7 +9,7 @@
 #include <string>
 
 template<Endianness endian>
-class PageWriter : protected FileStreamBase<StreamGoal::write>
+class PageWriter : public FileStreamBase<StreamGoal::write>
 {
 	using Base = FileStreamBase<StreamGoal::write>;
 
@@ -21,6 +21,18 @@ class PageWriter : protected FileStreamBase<StreamGoal::write>
 	void writePage(const DiskPage<endian>& page, std::streampos pos)
 	{
 		this->write(PageSerializer<endian>::serialize(page), pos);
+		this->flush();
+	}
+
+	void appendPage(const DiskPage<endian>& page)
+	{
+		this->append(PageSerializer<endian>::serialize(page));
+		this->flush();
+	}
+
+	void writePageHeader(const DiskPageHeader<endian>& header, std::streampos pos)
+	{
+		this->write(PageSerializer<endian>::serializeHeader(header), pos);
 		this->flush();
 	}
 };

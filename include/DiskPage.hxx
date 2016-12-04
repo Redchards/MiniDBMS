@@ -61,8 +61,10 @@ class DiskPageHeader
 	}
 
 	DiskPageHeader(const DiskPageHeader& other)
-	: pageSize_{other.pageSize_},
-	  nextPageOffset_{other.nextPageOffset_},
+	: nextPageOffset_{other.nextPageOffset_},
+	  pageSize_{other.pageSize_},
+	  rawPageSize_{other.rawPageSize_},
+	  headerSize_{other.headerSize_},
 	  schemaName_{other.schemaName_},
 	  freeSlotCount_{other.freeSlotCount_}
 	{}
@@ -128,7 +130,7 @@ class DiskPageHeader
 
 	void incrementFreeSlotCount() noexcept
 	{
-		incrementFreeSlotCount(1);
+		increaseFreeSlotCount(1);
 	}
 
 	bool isFull() const noexcept
@@ -189,6 +191,7 @@ class DiskPage
 		it += header_.getPageSize();
 
 		data_ = std::vector<uint8_t>{it, data.end()};
+		std::cout << "init : " << getRawPageSize() << std::endl;
 	}
 
 	DiskPage(PageIndex index, const DbSchema& schema, size_type pageSize)
@@ -197,7 +200,9 @@ class DiskPage
 	  dirtyFlag_{false},
 	  frameIndicators_(pageSize, false),
 	  data_(pageSize * schema.getDataSize(), 0) 
-	{}
+	{
+std::cout << "init : " << header_.getRawPageSize() << std::endl;
+	}
 
 	size_type getPageSize() const noexcept
 	{
@@ -218,6 +223,11 @@ class DiskPage
 	PageIndex getIndex() const noexcept
 	{
 		return index_;
+	}
+
+	const DiskPageHeader<endian>& getHeader() const noexcept
+	{
+		return header_;
 	}
 
 	size_type getFreeSlotCount() const noexcept
@@ -262,6 +272,7 @@ class DiskPage
 
 	void remove(size_type index) noexcept
 	{
+		std::cout << "remove : " << getIndex() << " : " << header_.getRawPageSize() << std::endl;
 		markDirty();
 		frameIndicators_[index] = false;
 		header_.incrementFreeSlotCount();
@@ -275,7 +286,7 @@ class DiskPage
 	bool add(const DbEntry<endian>& entry) noexcept
 	{
 		auto freeIndex = findFreeIndex();
-
+		std::cout << "add : " << getIndex() << " : " << getFreeSlotCount() << std::endl;
 		if(freeIndex)
 		{
 			replace(*freeIndex, entry);

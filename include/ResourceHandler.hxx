@@ -55,7 +55,7 @@ public:
 	ResourceHandler& operator=(ResourceHandler&& other) noexcept
 	{
 		swap(other);
-		other.release();
+		other.reset({});
 
 		return *this;
 	}

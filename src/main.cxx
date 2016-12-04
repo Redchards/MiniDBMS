@@ -21,6 +21,7 @@
 #include <PageWriter.hxx>
 #include <PageReader.hxx>
 #include <BufferManager.hxx>
+#include <DbSystem.hxx>
 
 static constexpr ConstString exprBegin = "const char *CTTI::GetTypeName() [T = ";
 static constexpr ConstString exprEnd = "] ";
@@ -178,7 +179,7 @@ int main()
 	}
 	auto wereEof = reader.eof();
 	std::cout << std::boolalpha;
-	std::cout << "Is end of file ? " << wereEof << std::endl;	
+	std::cout << "Is end of file ? " << wereEof << std::endl;
 
 	std::vector<char> vecTst{'E', 'l', 'r', 'i', 'c', '\0', '\0', '\0', '\0', '\0'};
 	std::string blip = "Omnibuslebossei";
@@ -228,6 +229,9 @@ int main()
 	std::cout << "Header size : " << h.getHeaderSize() << std::endl;
 	std::cout << "Data suze : " << h.getData().size() << std::endl;
 		size_type count = 0;
+
+	DbSystem<usedEndianness> system("db", "db.sch");
+
 	while(!end)
 	{
 		char ans;
@@ -287,7 +291,14 @@ int main()
 				} 
 			}
 
-			if(count >= 1)
+			/*if(count > 6)
+			{
+				std::cout << "third page" << std::endl;
+				DbEntry<usedEndianness> newEntry{schemaUsed, data};
+				std::cout << std::boolalpha << hhh.add(newEntry) << std::endl;
+				std::cout << newEntry.toString() << std::endl;
+			}
+			else if(count >= 1)
 			{
 				std::cout << "second page" << std::endl;
 				DbEntry<usedEndianness> newEntry{schemaUsed, data};
@@ -303,7 +314,13 @@ int main()
 				DbEntry<usedEndianness> newEntry{schemaUsed, data};
 					std::cout << std::boolalpha << h.add(newEntry) << std::endl;
 					std::cout << newEntry.toString() << std::endl;
-			}
+			}*/
+				//DbEntry<usedEndianness> newEntry{schemaUsed, data};
+					//std::cout << std::boolalpha << h.add(newEntry) << std::endl;
+					//std::cout << newEntry.toString() << std::endl;
+
+			system.add(DbEntry<usedEndianness>{schemaUsed, data});
+			
 
 			++count;
 		}
@@ -313,12 +330,14 @@ int main()
 		}
 	}
 
-	//PageWriter<usedEndianness> pgWriter("db");
-	//h.setNextPageOffset(h.getRawPageSize());
-	//pgWriter.writePage(h, 0);
-	//pgWriter.writePage(hh, h.getRawPageSize());
+	/*PageWriter<usedEndianness> pgWriter("db");
+	h.setNextPageOffset(h.getRawPageSize());
+	hh.setNextPageOffset(h.getRawPageSize() + hh.getRawPageSize());
+	pgWriter.writePage(h, 0);
+	pgWriter.writePage(hh, h.getRawPageSize());
+	pgWriter.writePage(hhh, hh.getNextPageOffset());*/
 
-	BufferManager<usedEndianness> buf("db");
+	/*BufferManager<usedEndianness> buf("db", 1);
 
 	//PageReader<usedEndianness> pgReader("db");
 	//auto rdPg = pgReader.readPage(0, 0);
@@ -329,7 +348,9 @@ int main()
 	std::cout << rdPg << std::endl;
 	// DiskPage<usedEndianness> rdPg{0, h.getData()};
 
-	for(int i = 0; i < 4; ++i)
+	if(!rdPg) return 0;
+
+	for(int i = 0; i < 5; ++i)
 	{
 		std::vector<uint8_t> vTest{rdPg->getData().begin() + i*schemaUsed.getDataSize(), rdPg->getData().begin() + (i+1)*schemaUsed.getDataSize()};
 			for(auto d : vTest)
@@ -337,14 +358,45 @@ int main()
 				std::cout << (int)d << " ";
 			}
 		std::cout << std::endl << std::endl;
-		/*auto h3 = PageSerializer<usedEndianness>::serialize(h);
-		for(auto d : h3)
-	{std::cout << (int)d << " ";}*/
+
+		DbEntry<usedEndianness> ent{schemaUsed, vTest};
+		std::cout << ent.toString() << std::endl;
+	}
+std::cout << "Hello : " << rdPg->getRawPageSize() << std::endl;
+	PageWriter<usedEndianness> pgWriter("db");
+	PageReader<usedEndianness> pgReader("db");
+	hh = pgReader.readPage(1, h.getRawPageSize());
+	std::vector<uint8_t> vv{rdPg->getData().begin(), rdPg->getData().begin() + schemaUsed.getDataSize()};
+	rdPg->add(DbEntry<usedEndianness>{schemaUsed, vv});
+	rdPg->add(DbEntry<usedEndianness>{schemaUsed, vv});
+	rdPg->add(DbEntry<usedEndianness>{schemaUsed, vv});
+	handle.reset({});
+	hh.remove(1);
+	pgWriter.writePage(hh, h.getRawPageSize());
+std::cout << "Hello" << std::endl;
+	 //hh.setNextPageOffset(h.getRawPageSize() + hh.getRawPageSize());
+std::cout << "Hello" << std::endl;
+	// pgWriter.writePage(hh, h.getRawPageSize());
+std::cout << "Hello" << std::endl;
+	handle = buf.requestFreePage<PageType::Writable>(schemaUsed);
+	std::cout << "Bouh ?" <<std::endl;
+	rdPg = handle.get();
+	
+std::cout << rdPg << std::endl;
+
+	for(int i = 0; i < 5 && rdPg; ++i)
+	{
+		std::vector<uint8_t> vTest{rdPg->getData().begin() + i*schemaUsed.getDataSize(), rdPg->getData().begin() + (i+1)*schemaUsed.getDataSize()};
+			for(auto d : vTest)
+			{
+				std::cout << (int)d << " ";
+			}
+		std::cout << std::endl << std::endl;
 		DbEntry<usedEndianness> ent{schemaUsed, vTest};
 		std::cout << ent.toString() << std::endl;
 	}
 	
-	std::cout << PageSerializer<usedEndianness>::serialize(h).size()<< std::endl;
+	std::cout << PageSerializer<usedEndianness>::serialize(h).size()<< std::endl;*/
 
     
     return 0;

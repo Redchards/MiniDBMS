@@ -119,7 +119,9 @@ class BufferManager
 		DiskPageDescriptor(DiskPage<endian>&& page_, std::streamoff offset_)
 		: page{std::move(page_)},
 		  offset{offset_}
-		{}
+		{
+			std::cout << "Blouh : " << page_.getRawPageSize() << " : " << page.getPageSize() << std::endl;
+		}
 
 		DiskPage<endian> page;
 		std::streamoff offset;
@@ -183,7 +185,7 @@ class BufferManager
 		{
 			pinCountList_[pageId] -= 1;
 		}
-		if(pinCount == 0)
+		if(pinCountList_[pageId] == 0)
 		{
 			replacePolicy_->release(getPageFromIndex<PageType::ReadOnly>(pageId));
 		}
@@ -206,16 +208,17 @@ class BufferManager
 		// If we do, then proceed to retrieve it from the buffer or fetch it from the file if it's not in buffer.
 		if(candidatePageOffset != firstAvailablePageOffsetMap_.end())
 		{
-			std::cout << "page" << std::endl;
 			auto pos = bufferPagePosition_.find(candidatePageOffset->second);
 			
 			if(pos != bufferPagePosition_.end())
 			{
+				std::cout << "Alreayd in buffer" << std::endl;
 				DiskPageDescriptor& pageDescriptor = bufferPool_[pos->second];
 				if(!pageDescriptor.page.isFull()) return HandleType::create(this, pos->second);
 			}
 			else
 			{
+				std::cout << "Fetchou" << std::endl;
 				auto newPageDescriptor = fetchNewPageIfFree(schema.getName(), candidatePageOffset->second);
 				if(newPageDescriptor)
 				{
@@ -226,14 +229,10 @@ class BufferManager
 		// If no available page is known, then look for a free page in the file.
 		// If we find any, fetch it and return it.
 		// Else, just return nullopt and let the system create a new page if needed.
-		else
+		auto offset = lookForFirstFreePage(schema.getName());
+		if(offset)
 		{
-			std::cout << "no page" << std::endl;
-			auto offset = lookForFirstFreePage(schema.getName());
-			if(offset)
-			{
-				return HandleType::create(this, fetchNewPage(schema.getName(), *offset).page.getIndex());
-			}
+			return HandleType::create(this, fetchNewPage(schema.getName(), *offset).page.getIndex());
 		}
 
 		return {};
@@ -285,6 +284,7 @@ class BufferManager
 
 			bufferPagePosition_.insert({newPageOffset, *candidatePageId});
 			bufferPool_[*candidatePageId] = {pgReader_.readPage(*candidatePageId, newPageOffset), newPageOffset};
+			std::cout << "Replaced page : " << *candidatePageId << std::endl;
 		}
 		
 		return candidatePageId;
@@ -295,8 +295,10 @@ class BufferManager
 		// If we still have room in buffer, just fetch the page and place it at the end.
 		if(bufferPool_.size() < getBufferSize())
 		{
+			std::cout << "Still have room in buffer" << std::endl;
 			bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
 			bufferPagePosition_[offset] = bufferPool_.size() - 1;
+			std::cout << bufferPool_.back().page.getRawPageSize() << std::endl;
 			return bufferPool_.back();
 		}
 		else
@@ -305,10 +307,12 @@ class BufferManager
 			auto replacedPageId = performPageReplace(schemaName, offset);
 			if(replacedPageId)
 			{
+				std::cout << "REPLAAAAAAAAAAAAAAAAAAAACE: : " << offset << std::endl;
 				return bufferPool_[*replacedPageId];
 			}
 			else
 			{
+				std::cout << "Extends buffer" << std::endl;
 				bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
 				bufferPagePosition_[offset] = bufferPool_.size() - 1;
 				return bufferPool_.back();
@@ -322,14 +326,12 @@ class BufferManager
 	{
 		if((bufferPool_.size() < getBufferSize()) && !pgReader_.readPageHeader(offset).isFull())
 		{
-			std::cout << "here" << std::endl;
 			bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
 			bufferPagePosition_[offset] = bufferPool_.size() - 1;
 			return bufferPool_.back();
 		}
 		else
 		{
-			std::cout << "heredd" << std::endl;
 			auto replacedPageId = performPageReplace(schemaName, offset);
 			if(replacedPageId && !bufferPool_[*replacedPageId].page.isFull())
 			{
@@ -357,22 +359,43 @@ class BufferManager
 		}
 
 		auto offset = it->second;
-		std::cout << offset << std::endl;
+		std::cout << "Look for first free page" << std::endl;
+
+		bool isFull;
+		std::string pageSchemaName;
+		std::streamoff nextPageOffset;
 
 		while(true)
 		{
-			DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
-			std::cout << header.getNextPageOffset() << std::endl;
-			if(!header.isFull())
+			auto pagePositionInBuffer = bufferPagePosition_.find(offset);
+
+			if(pagePositionInBuffer != bufferPagePosition_.end())
 			{
+				const DiskPage<endian>& page = getPageFromIndex<PageType::ReadOnly>(pagePositionInBuffer->second);
+				isFull = page.isFull();
+				pageSchemaName = page.getSchemaName();
+				nextPageOffset = page.getNextPageOffset();
+			}
+			else
+			{
+				DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
+				isFull = header.isFull();
+				pageSchemaName = header.getSchemaName();
+				nextPageOffset = header.getNextPageOffset();
+				std::cout << header.getFreeSlotCount() << std::endl;
+			}
+				std::cout << " d : " << nextPageOffset << " : " << isFull << std::endl;
+			if((pageSchemaName == schemaName) && !isFull)
+			{
+				firstAvailablePageOffsetMap_.insert({schemaName, offset});
 				return offset;
 			}
-			else if(header.getNextPageOffset() == 0)
+			else if(nextPageOffset == 0)
 			{
 				return {};
 			}
 
-			offset = header.getNextPageOffset();
+			offset = nextPageOffset;
 		}
 	}
 
@@ -394,7 +417,7 @@ class BufferManager
 				DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
 				if(header.getSchemaName() == schemaName)
 				{
-					firstPageOffsetMap_[schemaName] = offset;
+					firstPageOffsetMap_.insert({schemaName, offset});
 					return offset;
 				}
 
