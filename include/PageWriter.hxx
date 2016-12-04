@@ -15,7 +15,7 @@ class PageWriter : protected FileStreamBase<StreamGoal::write>
 
 	public:
 	PageWriter(const std::string& fileName)
-	: Base(fileName, std::ios_base::out | std::ios::binary)
+	: Base(fileName, std::ios_base::out | std::ios_base::in | std::ios::binary)
 	{}
 
 	void writePage(const DiskPage<endian>& page, std::streampos pos)

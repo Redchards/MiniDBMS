@@ -9,7 +9,7 @@
 #include <vector>
 
 template<Endianness endian>
-class PageReader : protected FileValueReader<endian>
+class PageReader : public FileValueReader<endian>
 {
 	using Base = FileValueReader<endian>;
 	using PageIndex = typename DiskPage<endian>::PageIndex;

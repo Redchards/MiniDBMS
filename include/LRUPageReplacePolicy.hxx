@@ -5,22 +5,30 @@
 #include <Optional.hxx>
 #include <PageReplacePolicy.hxx>
 
-#include <gsl/gsl_assert.hx>
+#include <gsl/gsl_assert.h>
 
 #include <vector>
 
-class LRUPageReplacePolicy : public PageReplacePolicy
+template<Endianness endian>
+class LRUPageReplacePolicy : public PageReplacePolicy<endian>
 {
 	public:
-	using PageIndex = PageReplacePolicy::PageIndex;
+	using PageIndex = typename PageReplacePolicy<endian>::PageIndex;
 
 	LRUPageReplacePolicy() = default;
 
-	LURPageReplacePolicy(size_type totalPageCount)
+	LRUPageReplacePolicy(size_type totalPageCount) noexcept
 	: candidateQueue_{},
 	  queuePagePosition_{totalPageCount}
+	{}
 
-	virtual void use(const DiskPage& page) override
+	LRUPageReplacePolicy(const LRUPageReplacePolicy& other) = default;
+	LRUPageReplacePolicy(LRUPageReplacePolicy&& other) = default;
+
+	LRUPageReplacePolicy& operator=(const LRUPageReplacePolicy& other) = default;
+	LRUPageReplacePolicy& operator=(LRUPageReplacePolicy&& other) = default;
+
+	virtual void use(const DiskPage<endian>& page) override
 	{
 		auto pageId = page.getIndex();
 
@@ -28,21 +36,21 @@ class LRUPageReplacePolicy : public PageReplacePolicy
 		{
 			queuePagePosition_.resize(pageId);
 		}
-		if(queuePagePosition[pageId])
+		if(queuePagePosition_[pageId])
 		{
-			candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition[pageId]);
-			*queuePagePosition[pageId] = {};
+			candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition_[pageId]);
+			*queuePagePosition_[pageId] = {};
 		}
 	}
 
-	virtual void release(const DiskPage& page) override
+	virtual void release(const DiskPage<endian>& page) override
 	{
 		auto pageId = page.getIndex();
 
 		/* If our page is indexed, we did something wrong */
-		Ensures(!queuePagePosition[pageId]);
+		Ensures(!queuePagePosition_[pageId]);
 
-		candidateQueue_.push_back({pageId, page.getSchemaName()});
+		candidateQueue_.push_back(DiskPageView{pageId, page.getSchemaName()});
 		queuePagePosition_[pageId] = candidateQueue_.size() + 1;
 	}
 
@@ -54,7 +62,7 @@ class LRUPageReplacePolicy : public PageReplacePolicy
 		return candidate;*/
 		for(auto pageView : candidateQueue_)
 		{
-			if(pageView.schemaName == schemaName)
+			if(*pageView.schemaName == schemaName)
 			{
 				auto pageId = pageView.index;
 				candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition_[pageId]);
@@ -64,9 +72,9 @@ class LRUPageReplacePolicy : public PageReplacePolicy
 					if(pos && (*pos > queuePagePosition_[pageId])) pos = pos - 1;
 				}
 
-				queuePagePosition_[pageId] = {}
+				queuePagePosition_[pageId] = {};
 
-				return pageId
+				return pageId;
 			}
 		}
 		return {};
@@ -76,14 +84,19 @@ class LRUPageReplacePolicy : public PageReplacePolicy
 
 	struct DiskPageView
 	{
-		BufferPageView(size_type index_, const std::string& schemaName_)
+		DiskPageView(PageIndex index_, const std::string& schemaName_)
 		: index{index_},
-		  schemaName{schemaName_}
+		  schemaName{&schemaName_}
 		{}
 
-		size_type index;
-		const std::string& schemaName;
-	}
+		DiskPageView(const DiskPageView&) = default;
+		DiskPageView(DiskPageView&&) = default;
+		DiskPageView& operator=(const DiskPageView&) = default;
+		DiskPageView& operator=(DiskPageView&&) = default;
+
+		PageIndex index;
+		const std::string* schemaName;
+	};
 
 	/* Two vectors working together a bit like a sparse integer set */
 	std::vector<DiskPageView> candidateQueue_;	

@@ -217,9 +217,7 @@ public:
 		uint8_t offset = 0;
 		for(auto byte : EndiannessRangeIteratorSelector<endian>::select(rg))
 		{
-			std::cout << "b : " <<(int)byte << std::endl;
 			out |= (byte << (offset * 8));
-			std::cout << (int)byte << std::endl;
 			++offset;
 		}
 
@@ -253,8 +251,6 @@ public:
 		size_type offset = 0;
 		for(auto byte : EndiannessRangeIteratorSelector<endian>::select(rg))
 		{
-			std::cout << "b : " <<(int)byte << std::endl;
-
 			out = out | ((std::streamoff)byte << (offset * 8));
 			++offset;
 		}

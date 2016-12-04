@@ -6,7 +6,7 @@
 #include <DataTypes.hxx>
 #include <DiskPage.hxx>
 #include <LRUPageReplacePolicy.hxx>
-#include <Meta.hxx>
+#include <MetaUtils.hxx>
 #include <PageReader.hxx>
 #include <PageWriter.hxx>
 
@@ -20,33 +20,51 @@ enum class PageType : uint8_t
 	Writable
 };
 
+template<Endianness endian>
 class BufferManager
 {
 	static constexpr size_type defaultBufferSize = 4096;
 	static constexpr size_type pageSize = 512;
 
 	public:
-	using PageIndex = typename DiskPage<endian>::PageIndex
-	using DefaultPolicy = LRUPageReplacePolicy;
+	using PageIndex = typename DiskPage<endian>::PageIndex;
+	using DefaultPolicy = LRUPageReplacePolicy<endian>;
+
+	struct DiskPageDescriptor
+	{
+		DiskPageDescriptor(DiskPage<endian>&& page_, std::streamoff offset_)
+		: page{std::move(page_)},
+		  offset{offset_}
+		{}
+
+		DiskPage<endian> page;
+		std::streamoff offset;
+	};
 
 	public:
 	BufferManager(const std::string& dbFileName)
-	: bufferPool_{defaultBufferSize},
+	: bufferPool_{},
 	  pinCountList_{},
 	  replacePolicy_{new DefaultPolicy()},
 	  bufferPagePosition_{},
 	  pgReader_{dbFileName},
-	  pgWriter_{dbFileName}
-	{}
+	  pgWriter_{dbFileName},
+	  bufferSize_{defaultBufferSize}
+	{
+		bufferPool_.reserve(bufferSize_);
+	}
 
 	BufferManager(const std::string& dbFileName, size_type bufferSize)
-	: bufferPool_{bufferSize},
+	: bufferPool_{},
 	  pinCountList_{},
 	  replacePolicy_{new DefaultPolicy()},
 	  bufferPagePosition_{},
 	  pgReader_{dbFileName},
-	  pgWriter_{dbFileName}
-	{}
+	  pgWriter_{dbFileName},
+	  bufferSize_{bufferSize}
+	{
+		bufferPool_.reserve(bufferSize_);
+	}
 
 	/* Functions to pin and unpin pages.
 	 * Using simple mutex lock to ensure the thread-safe
@@ -59,7 +77,7 @@ class BufferManager
 		{
 			/*{
 				std::lock_guard<std::mutex> lock{mut_}; */
-			pinCountList_[pageId].fetch_add(1);
+			pinCountList_[pageId] += 1;
 			replacePolicy_->use(pageId);
 			/*}*/
 		}
@@ -68,7 +86,7 @@ class BufferManager
 	void unpin(PageIndex pageId) noexcept
 	{
 		//std::lock_guard<std::mutex> lock{mut_};
-		size_type pinCount = pinCountList[pageId]; 
+		size_type pinCount = pinCountList_[pageId]; 
 		if((pageId < bufferPool_.size()) && (pinCount > 0))
 		{
 			pinCountList_[pageId] = pinCount - 1;
@@ -79,29 +97,57 @@ class BufferManager
 		}
 	}
 
-	template<PageType type>
-	DiskPage& requestPage(const DbSchema& schema)
+	// Maybe add a setter too ?
+	size_type getBufferSize() const noexcept
 	{
-		auto candidatePageIt = firstAvailablePageOffset_.find(schema.getName());
+		return bufferSize_;
+	}
 
-		if(candidatePageIt != firstAvailablePageOffset_.end())
+	template<PageType type>
+	optional<DiskPage<endian>&> requestFreePage(const DbSchema& schema)
+	{
+		// Look if we have any known available page.
+		auto candidatePageOffset = firstAvailablePageOffsetMap_.find(schema.getName());
+
+		// If we do, then proceed to retrieve it from the buffer or fetch it from the file if it's not in buffer.
+		if(candidatePageOffset != firstAvailablePageOffsetMap_.end())
 		{
-			auto pos = bufferPagePosition_.find(*candidatePageIt);
+			std::cout << "page" << std::endl;
+			auto pos = bufferPagePosition_.find(candidatePageOffset->second);
 			
 			if(pos != bufferPagePosition_.end())
 			{
-				return bufferPool_[*pos];
+				DiskPageDescriptor& pageDescriptor = bufferPool_[pos->second];
+				if(!pageDescriptor.page.isFull()) return pageDescriptor.page;
 			}
 			else
 			{
-				performPageReplace(schema.getName());
-				return requestPage(schema.getName());
+				auto newPageDescriptor = fetchNewPageIfFree(schema.getName(), candidatePageOffset->second);
+				if(newPageDescriptor)
+				{
+					return newPageDescriptor->page;
+				}
 			}
 		}
+		// If no available page is known, then look for a free page in the file.
+		// If we find any, fetch it and return it.
+		// Else, just return nullopt and let the system create a new page if needed.
 		else
 		{
-			bufferPool_
+			std::cout << "no page" << std::endl;
+			auto offset = lookForFirstFreePage(schema.getName());
+			if(offset)
+			{
+				return fetchNewPage(schema.getName(), *offset).page;
+			}
 		}
+
+		return {};
+	}
+
+	optional<DiskPage<endian>&> getNext(std::streamoff offset)
+	{
+		
 	}
 
 	/*template<>
@@ -110,25 +156,163 @@ class BufferManager
 		return requestPageAux(schemaName);
 	}*/
 
+	// TODO : Add a "clearCache" function to remove extraneous pages
+
 	private:
 
-	void performPageReplace(const std::string& schemaName)
+	optional<PageIndex> performPageReplace(const std::string& schemaName, std::streamoff newPageOffset)
 	{
 		auto candidatePageId = replacePolicy_->getCandidate(schemaName);
-		pgReader
+
+		if(candidatePageId)
+		{
+			auto oldPage = bufferPool_[*candidatePageId];
+
+			bufferPagePosition_.erase(oldPage.offset);
+
+			if(oldPage.page.isDirty())
+			{
+				pgWriter_.writePage(oldPage.page, oldPage.offset);
+			}
+
+			bufferPagePosition_.insert({newPageOffset, *candidatePageId});
+			bufferPool_[*candidatePageId] = {pgReader_.readPage(*candidatePageId, newPageOffset), newPageOffset};
+		}
+		
+		return candidatePageId;
 	}
 
-	std::vector<DiskPage> bufferPool_;
+	DiskPageDescriptor& fetchNewPage(const std::string& schemaName, std::streamoff offset)
+	{
+		// If we still have room in buffer, just fetch the page and place it at the end.
+		if(bufferPool_.size() < getBufferSize())
+		{
+			bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
+			bufferPagePosition_[offset] = bufferPool_.size() - 1;
+			return bufferPool_.back();
+		}
+		else
+		{
+			// Else, try to perform a page replace. If it fails, just extend the buffer and put it at the end.
+			auto replacedPageId = performPageReplace(schemaName, offset);
+			if(replacedPageId)
+			{
+				return bufferPool_[*replacedPageId];
+			}
+			else
+			{
+				bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
+				bufferPagePosition_[offset] = bufferPool_.size() - 1;
+				return bufferPool_.back();
+			}
+		}
+
+		return bufferPool_.back();
+	}
+
+	optional<DiskPageDescriptor&> fetchNewPageIfFree(const std::string& schemaName, std::streamoff offset)
+	{
+		if((bufferPool_.size() < getBufferSize()) && !pgReader_.readPageHeader(offset).isFull())
+		{
+			std::cout << "here" << std::endl;
+			bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
+			bufferPagePosition_[offset] = bufferPool_.size() - 1;
+			return bufferPool_.back();
+		}
+		else
+		{
+			std::cout << "heredd" << std::endl;
+			auto replacedPageId = performPageReplace(schemaName, offset);
+			if(replacedPageId && !bufferPool_[*replacedPageId].page.isFull())
+			{
+				return bufferPool_[*replacedPageId];
+			}
+		}
+
+		return {};
+	}
+
+	optional<std::streamoff> lookForFirstFreePage(const std::string& schemaName)
+	{
+		auto it = firstPageOffsetMap_.find(schemaName);
+
+		if(it == firstPageOffsetMap_.end())
+		{
+			if(lookForFirstPage(schemaName))
+			{
+				it = firstPageOffsetMap_.find(schemaName);
+			}
+			else
+			{
+				return {};
+			}
+		}
+
+		auto offset = it->second;
+		std::cout << offset << std::endl;
+
+		while(true)
+		{
+			DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
+			std::cout << header.getNextPageOffset() << std::endl;
+			if(!header.isFull())
+			{
+				return offset;
+			}
+			else if(header.getNextPageOffset() == 0)
+			{
+				return {};
+			}
+
+			offset = header.getNextPageOffset();
+		}
+	}
+
+	// A nullopt in return means that there is no page which contains this type of schema in the DB
+	optional<std::streamoff> lookForFirstPage(const std::string& schemaName)
+	{
+		auto it = firstPageOffsetMap_.find(schemaName);
+
+		if(it != firstPageOffsetMap_.end())
+		{
+			return it->second;
+		}
+		else
+		{
+			std::streamoff offset = 0;
+
+			while(true)
+			{
+				DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
+				if(header.getSchemaName() == schemaName)
+				{
+					firstPageOffsetMap_[schemaName] = offset;
+					return offset;
+				}
+
+				offset += header.getRawPageSize();
+				if(offset >= pgReader_.getFileSize())
+				{
+					return {};
+				}
+			}
+		}
+	}
+
+	std::vector<DiskPageDescriptor> bufferPool_;
 	std::vector<size_type> pinCountList_;
-	std::unique_ptr<PageReplacePolicy> replacePolicy_;
+	std::unique_ptr<PageReplacePolicy<endian>> replacePolicy_;
 	std::unordered_map<std::streamoff, size_type> bufferPagePosition_;
 
-	/* It is guaranteed that the page at the "std::streamoff" will not be full.
-	 * However, they may be no such page, in which case firstAvailablePageOffset_[schemaName] will return the "end" iterator */
-	std::unordered_map<std::string, std::streamoff> firstAvailablePageOffset_;
+	/* The page at the offset contained in this map may or may not be full, they are the last "non-full" page that we're aware of.
+	 * However, they may be no such page, in which case firstAvailablePageOffset_.find(schemaName) will return the "end" iterator */
+	std::unordered_map<std::string, std::streamoff> firstAvailablePageOffsetMap_;
+	std::unordered_map<std::string, std::streamoff> firstPageOffsetMap_;
 
 	PageReader<endian> pgReader_;
 	PageWriter<endian> pgWriter_;
+
+	size_type bufferSize_;
 };
 
 #endif // BUFFER_MANAGER_HXX

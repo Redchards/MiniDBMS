@@ -40,6 +40,10 @@ public:
 		{
 			fstream_->open(filename, flags);
 		}
+
+		std::streampos basePos = fstream_->tellg();
+		fstream_->seekg(0, std::ios::end);
+		fileSize_ = fstream_->tellg() - basePos;
 	}
 
 	void read(char* buffer, size_type size, std::streampos position)
@@ -124,6 +128,11 @@ public:
 		return fstream_->tellg();
 	}
 
+	std::streampos getFileSize() const noexcept
+	{
+		return fileSize_;
+	}
+
 protected:
 
 	void checkRead() const	
@@ -147,6 +156,7 @@ protected:
 
 	type* fstream_;
 	std::string filename_;
+	std::streampos fileSize_;
 	static std::unordered_map<std::string, type> streamMap_;
 };
 
@@ -165,6 +175,10 @@ public:
 		{
 			fstream_->open(filename, flags);
 		}
+
+		std::streampos basePos = fstream_->tellp();
+		fstream_->seekp(0, std::ios::end);
+		fileSize_ = fstream_->tellp() - basePos;
 	}
 
 	void write(const char* buffer, size_type size, std::streampos position)
@@ -222,6 +236,34 @@ public:
 		write(buffer.data(), buffer.size());
 	}
 
+	void append(const char* buffer, size_type size)
+	{
+		fstream_->seekp(0, std::ios::end);
+		fstream_->write(buffer, size);
+		checkWrite();
+	}
+
+	void append(const unsigned char* buffer, size_type size)
+	{
+		append(reinterpret_cast<const char*>(buffer), size);
+	}
+
+	template<class T, size_type n>
+	void append(const std::array<T, n>& buffer)
+	{
+		static_assert(std::is_convertible<T, char>::value || std::is_convertible<T, unsigned char>::value,
+					 "The buffer must contain byte size values.");
+		append(buffer.data(), buffer.size());
+	}
+
+	template<class T>
+	void append(const std::vector<T>& buffer)
+	{
+		static_assert(std::is_convertible<T, char>::value || std::is_convertible<T, unsigned char>::value,
+					 "The buffer must contain byte size values.");
+		append(buffer.data(), buffer.size());
+	}
+
 	void rewind()
 	{
 		goTo(0);
@@ -245,6 +287,10 @@ public:
 		return fstream_->tellp();
 	}
 
+	std::streampos getFileSize() const noexcept
+	{
+		return fileSize_;
+	}
 
 protected:
 	void checkWrite() const	
@@ -265,6 +311,7 @@ protected:
 
 	type* fstream_;
 	std::string filename_;
+	std::streampos fileSize_;
 	static std::unordered_map<std::string, type> streamMap_;
 };
 
@@ -322,6 +369,7 @@ private:
 		}
 		// So that stream will not interpret "whitespace" bytes as real whitespaces, and remove them.
 		this->fstream_->unsetf(std::ios::skipws);
+		
 	}
 };
 

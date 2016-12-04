@@ -43,10 +43,10 @@ public:
 	constexpr ConstString(const char(&cstr)[size]) noexcept : size_(size - 1), cstr_(cstr)
 	{}
 	
-	template<class TString>
+	template<class TString, class = void>
 	constexpr ConstString(const TString& other) noexcept : size_(other.size()), cstr_(other.data())
 	{}
-	
+
 	constexpr iterator begin() noexcept { return { *this, 0 }; }
 	constexpr const_iterator begin() const noexcept { return { *this, 0 }; }
 	constexpr const_iterator cbegin() const noexcept { return begin(); }

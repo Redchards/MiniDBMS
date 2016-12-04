@@ -77,6 +77,11 @@ class DiskPageHeader
 		return nextPageOffset_;
 	}
 
+	void setNextPageOffset(std::streamoff offset) noexcept
+	{
+		nextPageOffset_ = offset;
+	}
+
 	void setNextPageOffset(std::streamoff newOffset) const noexcept
 	{
 		nextPageOffset_ = newOffset;
@@ -204,6 +209,12 @@ class DiskPage
 		return header_.getNextPageOffset();
 	}
 
+	void setNextPageOffset(std::streamoff offset) noexcept
+	{
+		header_.setNextPageOffset(offset);
+		markDirty();
+	}
+
 	PageIndex getIndex() const noexcept
 	{
 		return index_;
@@ -261,7 +272,7 @@ class DiskPage
 		return !frameIndicators_[index];
 	}
 
-	bool add(const DbEntry<endian>& entry)noexcept
+	bool add(const DbEntry<endian>& entry) noexcept
 	{
 		auto freeIndex = findFreeIndex();
 
