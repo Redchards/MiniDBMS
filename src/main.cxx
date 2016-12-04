@@ -210,7 +210,8 @@ int main()
 		
 	DiskPage<usedEndianness> h21{0, dummyDiskData};
 	DiskPage<usedEndianness> h{0, schemaUsed, 1};
-	DiskPage<usedEndianness> hh{0, schemaUsed, 5};
+	DiskPage<usedEndianness> hh{1, schemaUsed, 5};
+	DiskPage<usedEndianness> hhh{2, schemaUsed, 5};
 	auto h2 = PageSerializer<usedEndianness>::serializeHeader(h);
 
 	for(auto df : h2)
@@ -312,23 +313,25 @@ int main()
 		}
 	}
 
-	PageWriter<usedEndianness> pgWriter("db");
-	h.setNextPageOffset(h.getRawPageSize());
-	pgWriter.writePage(h, 0);
-	pgWriter.writePage(hh, h.getRawPageSize());
+	//PageWriter<usedEndianness> pgWriter("db");
+	//h.setNextPageOffset(h.getRawPageSize());
+	//pgWriter.writePage(h, 0);
+	//pgWriter.writePage(hh, h.getRawPageSize());
 
 	BufferManager<usedEndianness> buf("db");
 
 	//PageReader<usedEndianness> pgReader("db");
 	//auto rdPg = pgReader.readPage(0, 0);
-	
-	auto rdPg = *buf.requestFreePage<PageType::Writable>(schemaUsed);
-
+	std::cout << "Bouh" << std::endl;
+	auto handle = buf.requestFreePage<PageType::Writable>(schemaUsed);
+	auto rdPg = handle.get();
+	std::cout << "LLL" << std::endl;
+	std::cout << rdPg << std::endl;
 	// DiskPage<usedEndianness> rdPg{0, h.getData()};
 
 	for(int i = 0; i < 4; ++i)
 	{
-		std::vector<uint8_t> vTest{rdPg.getData().begin() + i*schemaUsed.getDataSize(), rdPg.getData().begin() + (i+1)*schemaUsed.getDataSize()};
+		std::vector<uint8_t> vTest{rdPg->getData().begin() + i*schemaUsed.getDataSize(), rdPg->getData().begin() + (i+1)*schemaUsed.getDataSize()};
 			for(auto d : vTest)
 			{
 				std::cout << (int)d << " ";

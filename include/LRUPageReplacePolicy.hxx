@@ -34,12 +34,16 @@ class LRUPageReplacePolicy : public PageReplacePolicy<endian>
 
 		if(pageId >= queuePagePosition_.size())
 		{
-			queuePagePosition_.resize(pageId);
+			queuePagePosition_.resize(pageId + 1);
 		}
 		if(queuePagePosition_[pageId])
 		{
-			candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition_[pageId]);
-			*queuePagePosition_[pageId] = {};
+			auto position = queuePagePosition_[pageId];
+			if(position)
+			{
+				candidateQueue_.erase(candidateQueue_.begin() + *position);
+				queuePagePosition_[pageId] = {};
+			}
 		}
 	}
 

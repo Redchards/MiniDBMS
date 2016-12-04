@@ -9,6 +9,7 @@
 #include <MetaUtils.hxx>
 #include <PageReader.hxx>
 #include <PageWriter.hxx>
+#include <ResourceHandler.hxx>
 
 #include <mutex>
 #include <thread>
@@ -20,6 +21,89 @@ enum class PageType : uint8_t
 	Writable
 };
 
+class DoublePageFreeException : public std::exception
+{
+public:
+	DoublePageFreeException(const std::string& msg) : msg_{std::string{"Error when freeing disk page from buffer : "} + msg}
+	{}
+
+	const char* what() const noexcept override
+	{
+		return msg_.c_str();
+	}
+
+private:
+	const std::string msg_;
+};
+
+template<Endianness>
+class BufferManager;
+
+template<Endianness endian, PageType type>
+class BufferedPageStrategy
+{
+public:
+	struct ConstHandle
+	{
+		const BufferManager<endian>* manager;
+		typename BufferManager<endian>::PageIndex pageId;
+	};
+
+	struct Handle
+	{
+		BufferManager<endian>* manager;
+		typename BufferManager<endian>::PageIndex pageId;
+	};
+
+	using HandleType = std::conditional_t<type == PageType::ReadOnly,
+										  ConstHandle,
+										  Handle>;
+
+	static HandleType construct(decltype(std::declval<HandleType>().manager) manager, decltype(std::declval<HandleType>().pageId) pageId) noexcept 
+	{
+		manager->pin(pageId);
+		return {manager, pageId};
+	}
+
+	static void destroy(optional<HandleType> handle)
+	{
+		if(handle)
+		{
+			handle->manager->unpin(handle->pageId);
+		}
+		else
+		{
+			throw DoublePageFreeException("The handle is no longer valid");
+		}
+	}  
+};
+
+template<Endianness endian, PageType type>
+struct BufferedPageHandle : public ResourceHandler<BufferedPageStrategy<endian, type>>
+{
+	using Base = ResourceHandler<BufferedPageStrategy<endian, type>>;
+
+public:
+	using Base::Base;
+
+	auto get() const noexcept
+	{
+		using ManagerType = std::remove_pointer_t<decltype(Base::get()->manager)>;
+		using PageIndex = typename ManagerType::PageIndex;
+		using PageType = decltype(std::declval<ManagerType>().template getPageFromIndex<type>(std::declval<PageIndex>()));
+
+		if(Base::get())
+		{
+			auto pageId = Base::get()->pageId;
+
+
+			return optional<PageType>{Base::get()->manager->template getPageFromIndex<type>(pageId)};
+		}
+
+		return optional<PageType>{};
+	}
+};
+
 template<Endianness endian>
 class BufferManager
 {
@@ -27,7 +111,7 @@ class BufferManager
 	static constexpr size_type pageSize = 512;
 
 	public:
-	using PageIndex = typename DiskPage<endian>::PageIndex;
+	using PageIndex = size_type;
 	using DefaultPolicy = LRUPageReplacePolicy<endian>;
 
 	struct DiskPageDescriptor
@@ -77,8 +161,15 @@ class BufferManager
 		{
 			/*{
 				std::lock_guard<std::mutex> lock{mut_}; */
+			std::cout << "pin" << std::endl;
+			if(pageId >= pinCountList_.size())
+			{
+				pinCountList_.resize(pageId + 1);
+			}
+
 			pinCountList_[pageId] += 1;
-			replacePolicy_->use(pageId);
+			std::cout << replacePolicy_.get() << std::endl;
+			replacePolicy_->use(getPageFromIndex<PageType::ReadOnly>(pageId));
 			/*}*/
 		}
 	}
@@ -86,14 +177,15 @@ class BufferManager
 	void unpin(PageIndex pageId) noexcept
 	{
 		//std::lock_guard<std::mutex> lock{mut_};
+		std::cout << "unpin" << std::endl;
 		size_type pinCount = pinCountList_[pageId]; 
 		if((pageId < bufferPool_.size()) && (pinCount > 0))
 		{
-			pinCountList_[pageId] = pinCount - 1;
+			pinCountList_[pageId] -= 1;
 		}
 		if(pinCount == 0)
 		{
-			replacePolicy_->release(pageId);
+			replacePolicy_->release(getPageFromIndex<PageType::ReadOnly>(pageId));
 		}
 	}
 
@@ -104,10 +196,12 @@ class BufferManager
 	}
 
 	template<PageType type>
-	optional<DiskPage<endian>&> requestFreePage(const DbSchema& schema)
+	BufferedPageHandle<endian, type> requestFreePage(const DbSchema& schema)
 	{
 		// Look if we have any known available page.
 		auto candidatePageOffset = firstAvailablePageOffsetMap_.find(schema.getName());
+
+		using HandleType = BufferedPageHandle<endian, type>;
 
 		// If we do, then proceed to retrieve it from the buffer or fetch it from the file if it's not in buffer.
 		if(candidatePageOffset != firstAvailablePageOffsetMap_.end())
@@ -118,14 +212,14 @@ class BufferManager
 			if(pos != bufferPagePosition_.end())
 			{
 				DiskPageDescriptor& pageDescriptor = bufferPool_[pos->second];
-				if(!pageDescriptor.page.isFull()) return pageDescriptor.page;
+				if(!pageDescriptor.page.isFull()) return HandleType::create(this, pos->second);
 			}
 			else
 			{
 				auto newPageDescriptor = fetchNewPageIfFree(schema.getName(), candidatePageOffset->second);
 				if(newPageDescriptor)
 				{
-					return newPageDescriptor->page;
+					return HandleType::create(this, newPageDescriptor->page.getIndex());
 				}
 			}
 		}
@@ -138,11 +232,25 @@ class BufferManager
 			auto offset = lookForFirstFreePage(schema.getName());
 			if(offset)
 			{
-				return fetchNewPage(schema.getName(), *offset).page;
+				return HandleType::create(this, fetchNewPage(schema.getName(), *offset).page.getIndex());
 			}
 		}
 
 		return {};
+	}
+
+	// Maybe put private and allow just friend BufferedPageStrategy to use ?
+	template<PageType type>
+	auto getPageFromIndex(PageIndex pageId) noexcept
+	-> std::conditional_t<type == PageType::ReadOnly, const DiskPage<endian>&, DiskPage<endian>&>
+	{
+		return bufferPool_[pageId].page;
+	}
+
+	template<PageType type>
+	const DiskPage<endian>& getPageFromIndex(PageIndex pageId) const noexcept
+	{
+		return bufferPool_[pageId].page;
 	}
 
 	optional<DiskPage<endian>&> getNext(std::streamoff offset)
