@@ -152,6 +152,17 @@ class BufferManager
 		bufferPool_.reserve(bufferSize_);
 	}
 
+	~BufferManager()
+	{
+		for(auto descriptor : bufferPool_)
+		{
+			if(descriptor.page.isDirty())
+			{
+				pgWriter_.writePage(descriptor.page, descriptor.offset);
+			}
+		}
+	}
+
 	/* Functions to pin and unpin pages.
 	 * Using simple mutex lock to ensure the thread-safe
 	 * character of this action (these can effectively be called from multiple threads/process).
@@ -204,10 +215,10 @@ class BufferManager
 		auto candidatePageOffset = firstAvailablePageOffsetMap_.find(schema.getName());
 
 		using HandleType = BufferedPageHandle<endian, type>;
-
+			std::cout << "Watch me " << std::endl;
 		// If we do, then proceed to retrieve it from the buffer or fetch it from the file if it's not in buffer.
 		if(candidatePageOffset != firstAvailablePageOffsetMap_.end())
-		{
+		{			std::cout << "Watch me " << std::endl;
 			auto pos = bufferPagePosition_.find(candidatePageOffset->second);
 			
 			if(pos != bufferPagePosition_.end())
@@ -232,9 +243,10 @@ class BufferManager
 		auto offset = lookForFirstFreePage(schema.getName());
 		if(offset)
 		{
+			std::cout << "Watch me " << std::endl;
 			return HandleType::create(this, fetchNewPage(schema.getName(), *offset).page.getIndex());
 		}
-
+			std::cout << "Watch me " << std::endl;
 		return {};
 	}
 
@@ -358,6 +370,9 @@ class BufferManager
 			}
 		}
 
+		// If there is no page, no point in searching in file
+		if(it == firstPageOffsetMap_.end()) return {};
+
 		auto offset = it->second;
 		std::cout << "Look for first free page" << std::endl;
 
@@ -410,6 +425,11 @@ class BufferManager
 		}
 		else
 		{
+
+			// If there is no page in file, we have no chance to find what we're looking for
+			pgReader_.rewind();
+			if(pgReader_.eof()) return {};
+
 			std::streamoff offset = 0;
 
 			while(true)

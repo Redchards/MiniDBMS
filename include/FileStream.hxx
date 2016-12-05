@@ -33,23 +33,18 @@ public:
 
 public:
 	FileStreamSelector(const std::string& filename, std::ios::ios_base::openmode flags)
-	: filename_{filename}
+	: fstream_{filename},
+	  filename_{filename}
 	{
-		fstream_ = &streamMap_[filename];
-		if (!fstream_->is_open())
-		{
-			fstream_->open(filename, flags);
-		}
-
-		std::streampos basePos = fstream_->tellg();
-		fstream_->seekg(0, std::ios::end);
-		fileSize_ = fstream_->tellg() - basePos;
+		std::streampos basePos = fstream_.tellg();
+		fstream_.seekg(0, std::ios::end);
+		fileSize_ = fstream_.tellg() - basePos;
 	}
 
 	void read(char* buffer, size_type size, std::streampos position)
 	{
 		goTo(position);
-		fstream_->read(buffer, size);
+		fstream_.read(buffer, size);
 		checkRead();
 	}
 
@@ -78,7 +73,7 @@ public:
 	
 	void read(char* buffer, size_type size)
 	{
-		fstream_->read(buffer, size);
+		fstream_.read(buffer, size);
 		checkRead();
 	}
 
@@ -112,7 +107,7 @@ public:
 
 	void goTo(std::streampos position)
 	{
-		if (!fstream_->seekg(position))
+		if (!fstream_.seekg(position))
 		{
 			throw std::ios_base::failure("Error when processing the file !");
 		}
@@ -120,12 +115,12 @@ public:
 
 	bool exists() const
 	{
-		return fstream_;
+		return fstream_.is_open();
 	}
 
 	std::streampos getCurrentPosition()
 	{
-		return fstream_->tellg();
+		return fstream_.tellg();
 	}
 
 	std::streampos getFileSize() const noexcept
@@ -137,27 +132,27 @@ protected:
 
 	void checkRead() const	
 	{	
-		if (!fstream_->good())
+		if (!fstream_.good())
 		{
-			if(fstream_->eof())
+			if(fstream_.eof())
 			{
 				throw std::ios_base::failure(std::string{"Error : attempting to read beyond the end of the file '" + filename_ + "'."});
 			}
-			else if(fstream_->bad())
+			else if(fstream_.bad())
 			{
 				throw std::ios_base::failure(std::string{"Unknown error when read data from the file '"} + filename_ + "' !");
 			}
-			else if(fstream_->fail())
+			else if(fstream_.fail())
 			{
 				throw std::ios_base::failure(std::string{"Failed to read data from the file '"} + filename_ + "' !");
 			}
 		}
 	}
 
-	type* fstream_;
+	type fstream_;
 	std::string filename_;
 	std::streampos fileSize_;
-	static std::unordered_map<std::string, type> streamMap_;
+	// static std::unordered_map<std::string, type> streamMap_;
 };
 
 template<>
@@ -168,23 +163,19 @@ public:
 
 public:
 	FileStreamSelector(const std::string& filename, std::ios::ios_base::openmode flags)
-	: filename_{filename}
+	: fstream_{filename},
+	  filename_{filename}
+	  
 	{
-		fstream_ = &streamMap_[filename];
-		if (!fstream_->is_open())
-		{
-			fstream_->open(filename, flags);
-		}
-
-		std::streampos basePos = fstream_->tellp();
-		fstream_->seekp(0, std::ios::end);
-		fileSize_ = fstream_->tellp() - basePos;
+		std::streampos basePos = fstream_.tellp();
+		fstream_.seekp(0, std::ios::end);
+		fileSize_ = fstream_.tellp() - basePos;
 	}
 
 	void write(const char* buffer, size_type size, std::streampos position)
 	{
 		goTo(position);
-		fstream_->write(buffer, size);
+		fstream_.write(buffer, size);
 		checkWrite();
 	}
 
@@ -211,7 +202,7 @@ public:
 
 	void write(const char* buffer, size_type size)
 	{
-		fstream_->write(buffer, size);
+		fstream_.write(buffer, size);
 		checkWrite();
 	}
 
@@ -238,8 +229,8 @@ public:
 
 	void append(const char* buffer, size_type size)
 	{
-		fstream_->seekp(0, std::ios::end);
-		fstream_->write(buffer, size);
+		fstream_.seekp(0, std::ios::end);
+		fstream_.write(buffer, size);
 		checkWrite();
 	}
 
@@ -271,7 +262,7 @@ public:
 
 	void goTo(std::streampos position)
 	{
-		if (!fstream_->seekp(position))
+		if (!fstream_.seekp(position))
 		{
 			throw std::ios_base::failure("Error when processing the file !");
 		}
@@ -279,12 +270,12 @@ public:
 
 	void flush()
 	{
-		fstream_->flush();
+		fstream_.flush();
 	}
 
-	std::streampos getCurrentPosition() const noexcept
+	std::streampos getCurrentPosition() noexcept
 	{
-		return fstream_->tellp();
+		return fstream_.tellp();
 	}
 
 	std::streampos getFileSize() const noexcept
@@ -295,13 +286,13 @@ public:
 protected:
 	void checkWrite() const	
 	{	
-		if(!fstream_->good())
+		if(!fstream_.good())
 		{
-			if(fstream_->bad())
+			if(fstream_.bad())
 			{
 				throw std::ios_base::failure(std::string{"Unknown error when writing data to the file '"} + filename_ + "' !");
 			}
-			else if(fstream_->fail())
+			else if(fstream_.fail())
 			{
 				throw std::ios_base::failure(std::string{"Failed to write data to the file '"} + filename_ + "' !");
 			}
@@ -309,10 +300,10 @@ protected:
 	}
 
 
-	type* fstream_;
+	type fstream_;
 	std::string filename_;
 	std::streampos fileSize_;
-	static std::unordered_map<std::string, type> streamMap_;
+	// static std::unordered_map<std::string, type> streamMap_;
 };
 
 template<StreamGoal goal>
@@ -331,23 +322,23 @@ public:
 	void loadFile(const std::string& filename, std::ios::ios_base::openmode flags = std::ios_base::in)
 	{
 		unloadFile();
-		this->fstream_->open(filename, flags);
+		this->fstream_.open(filename, flags);
 		this->filename_ = filename;
 		init();
 	}
 
 	void unloadFile()
 	{
-		if (this->fstream_->is_open())
+		if (this->fstream_.is_open())
 		{
-			this->fstream_->close();
+			this->fstream_.close();
 			this->filename_ = "";
 		}
 	}
 
 	bool isOpen()
 	{
-		return this->fstream_->is_open();
+		return this->fstream_.is_open();
 	}
 
 	const std::string& getCurrentFileName() const noexcept
@@ -355,20 +346,20 @@ public:
 		return this->filename_;
 	}
 
-	bool eof() const noexcept
+	bool eof() noexcept
 	{
-		return this->fstream_->peek() == EOF;
+		return this->fstream_.peek() == EOF;
 	}
 
 private:
 	void init()
 	{
-		if (!this->fstream_->good())
+		if (!this->fstream_.good())
 		{
 			throw std::ios_base::failure((std::string("Error : failed to open the file ") + getCurrentFileName() + ". Please check that the file exists, and is a valid file !").c_str());
 		}
 		// So that stream will not interpret "whitespace" bytes as real whitespaces, and remove them.
-		this->fstream_->unsetf(std::ios::skipws);
+		this->fstream_.unsetf(std::ios::skipws);
 		
 	}
 };

@@ -77,12 +77,14 @@ class DbSystem
 
 	void addNewPage(const DbEntry<endian>& entry)
 	{
+
 		DiskPage<endian> newPage{0, entry.getSchema(), pageSize_};
 		newPage.add(entry);
 		PageWriter<endian> pgWriter{dbFile_};
 		std::streamoff newOffset = pgWriter.getFileSize();
 
 		auto lastPageOffset = lastOffsetMap_.find(entry.getSchema().getName());
+
 		if(lastPageOffset != lastOffsetMap_.end())
 		{
 			PageReader<endian> pgReader{dbFile_};
@@ -94,7 +96,7 @@ class DbSystem
 
 		newPage.add(entry);
 		pgWriter.appendPage(newPage);
-		lastOffsetMap_.insert({entry.getSchema().getName(), newOffset});;
+		lastOffsetMap_.insert({entry.getSchema().getName(), newOffset});
 	}
 
 	std::vector<DbSchema> schemaList_;

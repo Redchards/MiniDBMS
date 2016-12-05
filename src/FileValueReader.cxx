@@ -37,7 +37,7 @@ std::string FileValueReaderBase::readString(std::streampos pos)
 std::string FileValueReaderBase::readString()
 {
 	std::string buf;
-	std::getline(*fstream_, buf, '\0');
+	std::getline(fstream_, buf, '\0');
 	
 	return buf;
 }
