@@ -17,3 +17,9 @@ enum class Endianness : flag_type
 	big
 };
 
+enum class PageType : uint8_t
+{
+	ReadOnly,
+	Writable
+};
+

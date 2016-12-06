@@ -51,59 +51,40 @@ class LRUPageReplacePolicy : public PageReplacePolicy<endian>
 	{
 		auto pageId = page.getIndex();
 
-		/* If our page is indexed, we did something wrong */
-		Ensures(!queuePagePosition_[pageId]);
+		// Ensures(!queuePagePosition_[pageId]);
 
-		candidateQueue_.push_back(DiskPageView{pageId, page.getSchemaName()});
-		queuePagePosition_[pageId] = candidateQueue_.size() + 1;
+		candidateQueue_.push_back(pageId);
+		queuePagePosition_[pageId] = candidateQueue_.size() - 1;
 	}
 
-	virtual optional<PageIndex> getCandidate(const std::string& schemaName) override
+	virtual optional<PageIndex> getCandidate() override
 	{
 		/*PageIndex candidate = candidateQueue_.front();
 		candidateQueue_.erase(candidateQueue_.begin());
 
 		return candidate;*/
-		for(auto pageView : candidateQueue_)
+			std::cout << "search candidate" << std::endl;
+		for(auto pageId : candidateQueue_)
 		{
-			if(*pageView.schemaName == schemaName)
+			candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition_[pageId]);
+
+			for(auto& pos : queuePagePosition_)
 			{
-				auto pageId = pageView.index;
-				candidateQueue_.erase(candidateQueue_.begin() + *queuePagePosition_[pageId]);
-
-				for(auto& pos : queuePagePosition_)
-				{
-					if(pos && (*pos > queuePagePosition_[pageId])) pos = pos - 1;
-				}
-
-				queuePagePosition_[pageId] = {};
-
-				return pageId;
+				if(pos && (*pos > queuePagePosition_[pageId])) pos = pos - 1;
 			}
+
+			queuePagePosition_[pageId] = {};
+
+			return pageId;
 		}
+
 		return {};
 	}
 
 	private:
 
-	struct DiskPageView
-	{
-		DiskPageView(PageIndex index_, const std::string& schemaName_)
-		: index{index_},
-		  schemaName{&schemaName_}
-		{}
-
-		DiskPageView(const DiskPageView&) = default;
-		DiskPageView(DiskPageView&&) = default;
-		DiskPageView& operator=(const DiskPageView&) = default;
-		DiskPageView& operator=(DiskPageView&&) = default;
-
-		PageIndex index;
-		const std::string* schemaName;
-	};
-
 	/* Two vectors working together a bit like a sparse integer set */
-	std::vector<DiskPageView> candidateQueue_;	
+	std::vector<PageIndex> candidateQueue_;	
 	std::vector<optional<size_type>> queuePagePosition_;
 };
 

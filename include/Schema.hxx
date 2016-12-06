@@ -7,6 +7,7 @@
 
 #include <Configuration.hxx>
 #include <DataTypes.hxx>
+#include <Optional.hxx>
 
 struct FieldDescriptor
 {
@@ -96,12 +97,32 @@ class DbSchema
 		return at(index);
 	}
 	
-	size_type getIndexOf(const std::string& fieldName)
+	optional<size_type> findIndexOf(const std::string& fieldName) const
 	{
-		return std::distance(
-		std::find_if(internal_.begin(), internal_.end(), [&fieldName](const auto& elem) {
+		auto it = std::find_if(internal_.begin(), internal_.end(), [&fieldName](const auto& elem) {
 			return elem.name == fieldName;
-		}), internal_.begin());
+		});
+
+		if(it == internal_.end()) return {};
+		return std::distance(it, internal_.begin());
+		
+	}
+
+	size_type getFieldOffset(size_type index) const noexcept
+	{
+		size_type offset = 0;
+
+		for(size_type i = 0; i < index; ++i)
+		{
+			offset += internal_[i].type.getSize();
+		}
+
+		return offset;
+	}
+
+	size_type getFieldOffset(const std::string& fieldName) const noexcept
+	{
+		return getFieldOffset(findIndexOf(fieldName));
 	}
 
 	private:

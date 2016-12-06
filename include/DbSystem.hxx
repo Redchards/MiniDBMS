@@ -25,8 +25,8 @@ class DbSystem
 	  pageSize_{pageSize},
 	  lastOffsetMap_{}
 	{
-		std::cout << "Blouh" << std::endl;
 		FileValueReader<endian> schemaReader{schemaFile};
+		schemaReader.rewind();
 		while(!schemaReader.eof())
 		{
 			size_type serialDataSize = schemaReader.readValue(8);
@@ -36,6 +36,18 @@ class DbSystem
 
 			schemaList_.push_back(DbSchemaSerializer<endian>::deserialize(serialData));
 			schemaMapping_[schemaList_.back().getName()] = schemaList_.size() - 1;
+		}
+		std::cout << schemaList_.size() << std::endl;
+		for(const DbSchema& schema : schemaList_)
+		{
+			std::cout << "Heree" << std::endl;
+			auto offset = bufferManager_.lookForLastPage(schema.getName());
+			std::cout << "Heree" << std::endl;
+			if(offset)
+			{
+				std::cout << "add offset" << std::endl;
+				lastOffsetMap_.insert({schema.getName(), *offset});
+			}
 		}
 	}
 
@@ -58,8 +70,8 @@ class DbSystem
 		return *it;
 	}
 
-	
-	void add(const DbEntry<endian>& entry)
+	template<PageType type>
+	void add(const DbEntry<endian, type>& entry)
 	{
 		// Make sure that the entry has a valid schema ?
 		auto freePageHandle = bufferManager_.template requestFreePage<PageType::Writable>(entry.getSchema());
@@ -69,34 +81,37 @@ class DbSystem
 		}
 		else
 		{
+			std::cout << "Add new " << std::endl;
 			addNewPage(entry);
 		}
 	}
 
 	private:
 
-	void addNewPage(const DbEntry<endian>& entry)
+	void addNewPage(const DbEntry<endian, PageType::ReadOnly>& entry)
 	{
 
 		DiskPage<endian> newPage{0, entry.getSchema(), pageSize_};
-		newPage.add(entry);
 		PageWriter<endian> pgWriter{dbFile_};
+
 		std::streamoff newOffset = pgWriter.getFileSize();
+
+		newPage.add(entry);
+		pgWriter.appendPage(newPage);
 
 		auto lastPageOffset = lastOffsetMap_.find(entry.getSchema().getName());
 
 		if(lastPageOffset != lastOffsetMap_.end())
 		{
-			PageReader<endian> pgReader{dbFile_};
-			DiskPageHeader<endian> lastPageHeader = pgReader.readPageHeader(lastPageOffset->second);
-			lastPageHeader.setNextPageOffset(newOffset);
+			auto lastPageHandle = bufferManager_.template requestPage<PageType::Writable>(lastPageOffset->second);
+			lastPageHandle.get()->setNextPageOffset(newOffset);
+			bufferManager_.flush(lastPageHandle.get()->getIndex());
 
-			pgWriter.writePageHeader(lastPageHeader, lastPageOffset->second);
+			lastOffsetMap_[entry.getSchema().getName()] = newOffset;
 		}
 
-		newPage.add(entry);
-		pgWriter.appendPage(newPage);
 		lastOffsetMap_.insert({entry.getSchema().getName(), newOffset});
+
 	}
 
 	std::vector<DbSchema> schemaList_;

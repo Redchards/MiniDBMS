@@ -3,6 +3,7 @@
 
 #include <RawDataUtils.hxx>
 #include <Optional.hxx>
+#include <Configuration.hxx>
 
 #include <gsl/gsl_assert.h>
 
@@ -56,7 +57,7 @@ class DiskPageHeader
 	  schemaName_{schemaName},
 	  freeSlotCount_{freeSlotCount}
 	{
-		rawPageSize_ = getSize() + (elemSize * pageSize);
+		rawPageSize_ = getSize() + (elemSize * pageSize) + pageSize;
 		headerSize_ = getSize();
 	}
 
@@ -191,7 +192,6 @@ class DiskPage
 		it += header_.getPageSize();
 
 		data_ = std::vector<uint8_t>{it, data.end()};
-		std::cout << "init : " << getRawPageSize() << std::endl;
 	}
 
 	DiskPage(PageIndex index, const DbSchema& schema, size_type pageSize)
@@ -201,7 +201,6 @@ class DiskPage
 	  frameIndicators_(pageSize, false),
 	  data_(pageSize * schema.getDataSize(), 0) 
 	{
-std::cout << "init : " << header_.getRawPageSize() << std::endl;
 	}
 
 	size_type getPageSize() const noexcept
@@ -283,7 +282,8 @@ std::cout << "init : " << header_.getRawPageSize() << std::endl;
 		return !frameIndicators_[index];
 	}
 
-	bool add(const DbEntry<endian>& entry) noexcept
+	template<PageType type>
+	bool add(const DbEntry<endian, type>& entry) noexcept
 	{
 		auto freeIndex = findFreeIndex();
 		std::cout << "add : " << getIndex() << " : " << getFreeSlotCount() << std::endl;
@@ -300,7 +300,8 @@ std::cout << "init : " << header_.getRawPageSize() << std::endl;
 		return false;
 	}
 
-	void replace(size_type index, const DbEntry<endian>& entry) noexcept
+	template<PageType type>
+	void replace(size_type index, const DbEntry<endian, type>& entry) noexcept
 	{
 		Ensures(entry.getSchema().getName() == getSchemaName());
 

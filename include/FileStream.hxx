@@ -33,13 +33,9 @@ public:
 
 public:
 	FileStreamSelector(const std::string& filename, std::ios::ios_base::openmode flags)
-	: fstream_{filename},
+	: fstream_{filename, flags},
 	  filename_{filename}
-	{
-		std::streampos basePos = fstream_.tellg();
-		fstream_.seekg(0, std::ios::end);
-		fileSize_ = fstream_.tellg() - basePos;
-	}
+	{}
 
 	void read(char* buffer, size_type size, std::streampos position)
 	{
@@ -107,7 +103,8 @@ public:
 
 	void goTo(std::streampos position)
 	{
-		if (!fstream_.seekg(position))
+		fstream_.clear();
+		if (!fstream_.seekg(position, std::ios::beg))
 		{
 			throw std::ios_base::failure("Error when processing the file !");
 		}
@@ -123,9 +120,12 @@ public:
 		return fstream_.tellg();
 	}
 
-	std::streampos getFileSize() const noexcept
+	std::streampos getFileSize() noexcept
 	{
-		return fileSize_;
+		rewind();
+		std::streampos basePos = fstream_.tellg();
+		fstream_.seekg(0, std::ios::end);
+		return fstream_.tellg() - basePos;
 	}
 
 protected:
@@ -151,7 +151,6 @@ protected:
 
 	type fstream_;
 	std::string filename_;
-	std::streampos fileSize_;
 	// static std::unordered_map<std::string, type> streamMap_;
 };
 
@@ -163,14 +162,10 @@ public:
 
 public:
 	FileStreamSelector(const std::string& filename, std::ios::ios_base::openmode flags)
-	: fstream_{filename},
+	: fstream_{filename, flags},
 	  filename_{filename}
 	  
-	{
-		std::streampos basePos = fstream_.tellp();
-		fstream_.seekp(0, std::ios::end);
-		fileSize_ = fstream_.tellp() - basePos;
-	}
+	{}
 
 	void write(const char* buffer, size_type size, std::streampos position)
 	{
@@ -262,7 +257,8 @@ public:
 
 	void goTo(std::streampos position)
 	{
-		if (!fstream_.seekp(position))
+		fstream_.clear();
+		if (!fstream_.seekp(position, std::ios::beg))
 		{
 			throw std::ios_base::failure("Error when processing the file !");
 		}
@@ -278,9 +274,12 @@ public:
 		return fstream_.tellp();
 	}
 
-	std::streampos getFileSize() const noexcept
+	std::streampos getFileSize() noexcept
 	{
-		return fileSize_;
+		rewind();
+		std::streampos basePos = fstream_.tellp();
+		fstream_.seekp(0, std::ios::end);
+		return fstream_.tellp() - basePos;
 	}
 
 protected:
@@ -302,7 +301,6 @@ protected:
 
 	type fstream_;
 	std::string filename_;
-	std::streampos fileSize_;
 	// static std::unordered_map<std::string, type> streamMap_;
 };
 

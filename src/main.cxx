@@ -186,7 +186,7 @@ int main()
 	vecTst.insert(vecTst.end(), blip.begin(), blip.end());
 	vecTst.push_back(16);vecTst.push_back(2);vecTst.push_back(7);vecTst.push_back(224);
 	for(auto byte : vecTst){std::cout << byte << " ";}
-	std::cout << DbEntry<Endianness::big>{schList[0], vecTst}.toString() << std::endl;
+	std::cout << DbEntry<Endianness::big, PageType::ReadOnly>{schList[0], vecTst}.toString() << std::endl;
 
 	bool end = false;
 	auto schemaUsed = schList[2];
@@ -319,7 +319,12 @@ int main()
 					//std::cout << std::boolalpha << h.add(newEntry) << std::endl;
 					//std::cout << newEntry.toString() << std::endl;
 
-			system.add(DbEntry<usedEndianness>{schemaUsed, data});
+			DbEntry<usedEndianness, PageType::Writable> testy{schemaUsed, data};
+
+			std::cout << "Prenom : " << testy.getAs<std::string>(1) << std::endl;
+			testy.setAs<std::string>("Surname", "Bijour");
+			std::cout << "Prenom : " << testy.getAs<std::string>(1) << std::endl;
+			system.add(DbEntry<usedEndianness, PageType::ReadOnly>{schemaUsed, data});
 			
 
 			++count;

@@ -17,7 +17,7 @@ class PageReplacePolicy
 	public:
 	virtual void use(const DiskPage<endian>& page) = 0;
 	virtual void release(const DiskPage<endian>& page) = 0;
-	virtual optional<PageIndex> getCandidate(const std::string& schemaName) = 0;
+	virtual optional<PageIndex> getCandidate() = 0;
 };
 
 #endif // PAGE_REPLACE_POLICY_HXX

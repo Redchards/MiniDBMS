@@ -15,12 +15,6 @@
 #include <thread>
 #include <vector>
 
-enum class PageType : uint8_t
-{
-	ReadOnly,
-	Writable
-};
-
 class DoublePageFreeException : public std::exception
 {
 public:
@@ -43,21 +37,11 @@ template<Endianness endian, PageType type>
 class BufferedPageStrategy
 {
 public:
-	struct ConstHandle
-	{
-		const BufferManager<endian>* manager;
-		typename BufferManager<endian>::PageIndex pageId;
-	};
-
-	struct Handle
+	struct HandleType
 	{
 		BufferManager<endian>* manager;
 		typename BufferManager<endian>::PageIndex pageId;
 	};
-
-	using HandleType = std::conditional_t<type == PageType::ReadOnly,
-										  ConstHandle,
-										  Handle>;
 
 	static HandleType construct(decltype(std::declval<HandleType>().manager) manager, decltype(std::declval<HandleType>().pageId) pageId) noexcept 
 	{
@@ -78,6 +62,9 @@ public:
 	}  
 };
 
+template<Endianness endian>
+class BufferManager;
+
 template<Endianness endian, PageType type>
 struct BufferedPageHandle : public ResourceHandler<BufferedPageStrategy<endian, type>>
 {
@@ -86,29 +73,46 @@ struct BufferedPageHandle : public ResourceHandler<BufferedPageStrategy<endian, 
 public:
 	using Base::Base;
 
-	auto get() const noexcept
+	auto get() noexcept
 	{
 		using ManagerType = std::remove_pointer_t<decltype(Base::get()->manager)>;
 		using PageIndex = typename ManagerType::PageIndex;
-		using PageType = decltype(std::declval<ManagerType>().template getPageFromIndex<type>(std::declval<PageIndex>()));
+		using DiskPageType = std::conditional_t<type == PageType::ReadOnly, const DiskPage<endian>&, DiskPage<endian>&>;
 
 		if(Base::get())
 		{
 			auto pageId = Base::get()->pageId;
 
-
-			return optional<PageType>{Base::get()->manager->template getPageFromIndex<type>(pageId)};
+			return optional<DiskPageType>{Base::get()->manager->bufferPool_[pageId].page};
 		}
 
-		return optional<PageType>{};
+		return optional<DiskPageType>{};
+	}
+
+	auto get() const noexcept
+	{
+		using ManagerType = std::remove_pointer_t<decltype(Base::get()->manager)>;
+		using PageIndex = typename ManagerType::PageIndex;
+
+		if(Base::get())
+		{
+			auto pageId = Base::get()->pageId;
+
+			return optional<const DiskPage<endian>&>{Base::get()->manager->bufferPool_[pageId].page};
+		}
+
+		return optional<const DiskPage<endian>&>{};
 	}
 };
 
 template<Endianness endian>
 class BufferManager
 {
-	static constexpr size_type defaultBufferSize = 4096;
+	static constexpr size_type defaultBufferSize = 512;
 	static constexpr size_type pageSize = 512;
+
+	friend class BufferedPageHandle<endian, PageType::ReadOnly>;
+	friend class BufferedPageHandle<endian, PageType::Writable>;
 
 	public:
 	using PageIndex = size_type;
@@ -182,7 +186,7 @@ class BufferManager
 
 			pinCountList_[pageId] += 1;
 			std::cout << replacePolicy_.get() << std::endl;
-			replacePolicy_->use(getPageFromIndex<PageType::ReadOnly>(pageId));
+			replacePolicy_->use(bufferPool_[pageId].page);
 			/*}*/
 		}
 	}
@@ -198,7 +202,7 @@ class BufferManager
 		}
 		if(pinCountList_[pageId] == 0)
 		{
-			replacePolicy_->release(getPageFromIndex<PageType::ReadOnly>(pageId));
+			replacePolicy_->release(bufferPool_[pageId].page);
 		}
 	}
 
@@ -230,7 +234,7 @@ class BufferManager
 			else
 			{
 				std::cout << "Fetchou" << std::endl;
-				auto newPageDescriptor = fetchNewPageIfFree(schema.getName(), candidatePageOffset->second);
+				auto newPageDescriptor = fetchNewPageIfFree(candidatePageOffset->second);
 				if(newPageDescriptor)
 				{
 					return HandleType::create(this, newPageDescriptor->page.getIndex());
@@ -244,29 +248,129 @@ class BufferManager
 		if(offset)
 		{
 			std::cout << "Watch me " << std::endl;
-			return HandleType::create(this, fetchNewPage(schema.getName(), *offset).page.getIndex());
+			return HandleType::create(this, fetchNewPage(*offset).page.getIndex());
 		}
+		std::cout << "Hel : " << bufferPool_.size() << std::endl;
 			std::cout << "Watch me " << std::endl;
 		return {};
 	}
 
 	// Maybe put private and allow just friend BufferedPageStrategy to use ?
 	template<PageType type>
-	auto getPageFromIndex(PageIndex pageId) noexcept
-	-> std::conditional_t<type == PageType::ReadOnly, const DiskPage<endian>&, DiskPage<endian>&>
+	BufferedPageHandle<endian, type> getPageFromIndex(PageIndex pageId) noexcept
 	{
-		return bufferPool_[pageId].page;
+		using HandleType = BufferedPageHandle<endian, type>;
+		return HandleType::create(this, bufferPool_[pageId].page.getIndex());
 	}
 
 	template<PageType type>
-	const DiskPage<endian>& getPageFromIndex(PageIndex pageId) const noexcept
+	BufferedPageHandle<endian, type> requestPage(std::streamoff offset)
 	{
-		return bufferPool_[pageId].page;
+		auto pagePosition = bufferPagePosition_.find(offset);
+
+		using HandleType = BufferedPageHandle<endian, type>;
+
+		if(pagePosition != bufferPagePosition_.end())
+		{
+			return HandleType::create(this, bufferPool_[pagePosition->second].page.getIndex());
+		}
+	
+		return HandleType::create(this, fetchNewPage(offset).page.getIndex());
 	}
 
-	optional<DiskPage<endian>&> getNext(std::streamoff offset)
+	template<PageType type>
+	BufferedPageHandle<endian, type> requestNextPage(const DiskPage<endian>& page)
 	{
-		
+		auto pagePosition = bufferPagePosition_.find(page.getNextPageOffset());
+
+		using HandleType = BufferedPageHandle<endian, type>;
+
+		if(pagePosition != bufferPagePosition_.end())
+		{
+			return HandleType::create(this, pagePosition->page);
+		}
+
+		return HandleType::create(this, fetchNewPage(page.getNextPageOffset()).page.getIndex());
+	}
+
+	template<PageType type>
+	optional<std::streamoff> getFirstPageOffset(const DbSchema& schema)
+	{
+		auto it = firstPageOffsetMap_.find(schema.getName());
+
+		if(it != firstPageOffsetMap_.end())
+		{
+			return it->second;
+		}
+		else
+		{
+			
+		}
+	}
+
+	// A nullopt in return means that there is no page which contains this type of schema in the DB
+	optional<std::streamoff> lookForFirstPage(const std::string& schemaName)
+	{
+		auto it = firstPageOffsetMap_.find(schemaName);
+
+		if(it != firstPageOffsetMap_.end())
+		{
+			return it->second;
+		}
+		else
+		{
+
+			// If there is no page in file, we have no chance to find what we're looking for
+			pgReader_.rewind();
+			if(pgReader_.eof()) return {};
+
+			std::streamoff offset = 0;
+
+			while(true)
+			{
+			std::cout << offset << std::endl;
+				DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
+
+				if(header.getSchemaName() == schemaName)
+				{
+					firstPageOffsetMap_.insert({schemaName, offset});
+					return offset;
+				}
+				std::cout << pgReader_.getFileSize() << std::endl;
+				offset += header.getRawPageSize();
+				if((offset + 1) >= pgReader_.getFileSize())
+				{
+					std::cout << "return" << std::endl;
+					return {};
+				}
+			std::cout << "hello" << std::endl;
+			}
+		}
+	}
+
+	optional<std::streamoff> lookForLastPage(const std::string& schemaName)
+	{
+		auto firstPageOffset = lookForFirstPage(schemaName);
+		std::cout << "First page offset ? : " << firstPageOffset << std::endl;
+		// If there is no page in file, we have no chance to find what we're looking for
+		if(!firstPageOffset) return {};
+
+		DiskPageHeader<endian> header = pgReader_.readPageHeader(*firstPageOffset);
+		std::streamoff offset = *firstPageOffset;
+
+		while(header.getNextPageOffset() != 0)
+		{
+			offset = header.getNextPageOffset();
+			header = pgReader_.readPageHeader(offset);
+		}
+
+		return offset;
+	}
+
+	void flush(PageIndex index)
+	{
+		std::cout << "Flush : " << bufferPool_.size() << std::endl;
+		pgWriter_.writePage(bufferPool_[index].page, bufferPool_[index].offset);
 	}
 
 	/*template<>
@@ -279,10 +383,11 @@ class BufferManager
 
 	private:
 
-	optional<PageIndex> performPageReplace(const std::string& schemaName, std::streamoff newPageOffset)
+	optional<PageIndex> performPageReplace(std::streamoff newPageOffset)
 	{
-		auto candidatePageId = replacePolicy_->getCandidate(schemaName);
+		auto candidatePageId = replacePolicy_->getCandidate();
 
+		std::cout << "Try to replace page" << std::endl;
 		if(candidatePageId)
 		{
 			auto oldPage = bufferPool_[*candidatePageId];
@@ -302,12 +407,13 @@ class BufferManager
 		return candidatePageId;
 	}
 
-	DiskPageDescriptor& fetchNewPage(const std::string& schemaName, std::streamoff offset)
+	// Need optional as return here !
+	DiskPageDescriptor& fetchNewPage(std::streamoff offset)
 	{
 		// If we still have room in buffer, just fetch the page and place it at the end.
 		if(bufferPool_.size() < getBufferSize())
 		{
-			std::cout << "Still have room in buffer" << std::endl;
+			std::cout << "Still have room in buffer : " << offset << std::endl;
 			bufferPool_.emplace_back(pgReader_.readPage(bufferPool_.size(), offset), offset);
 			bufferPagePosition_[offset] = bufferPool_.size() - 1;
 			std::cout << bufferPool_.back().page.getRawPageSize() << std::endl;
@@ -316,7 +422,8 @@ class BufferManager
 		else
 		{
 			// Else, try to perform a page replace. If it fails, just extend the buffer and put it at the end.
-			auto replacedPageId = performPageReplace(schemaName, offset);
+			std::cout << "No more room in buffer" << std::endl;			
+			auto replacedPageId = performPageReplace(offset);
 			if(replacedPageId)
 			{
 				std::cout << "REPLAAAAAAAAAAAAAAAAAAAACE: : " << offset << std::endl;
@@ -331,10 +438,11 @@ class BufferManager
 			}
 		}
 
+		// Should return nulllopt
 		return bufferPool_.back();
 	}
 
-	optional<DiskPageDescriptor&> fetchNewPageIfFree(const std::string& schemaName, std::streamoff offset)
+	optional<DiskPageDescriptor&> fetchNewPageIfFree(std::streamoff offset)
 	{
 		if((bufferPool_.size() < getBufferSize()) && !pgReader_.readPageHeader(offset).isFull())
 		{
@@ -344,7 +452,7 @@ class BufferManager
 		}
 		else
 		{
-			auto replacedPageId = performPageReplace(schemaName, offset);
+			auto replacedPageId = performPageReplace(offset);
 			if(replacedPageId && !bufferPool_[*replacedPageId].page.isFull())
 			{
 				return bufferPool_[*replacedPageId];
@@ -386,7 +494,7 @@ class BufferManager
 
 			if(pagePositionInBuffer != bufferPagePosition_.end())
 			{
-				const DiskPage<endian>& page = getPageFromIndex<PageType::ReadOnly>(pagePositionInBuffer->second);
+				const DiskPage<endian>& page = bufferPool_[pagePositionInBuffer->second].page;
 				isFull = page.isFull();
 				pageSchemaName = page.getSchemaName();
 				nextPageOffset = page.getNextPageOffset();
@@ -411,42 +519,6 @@ class BufferManager
 			}
 
 			offset = nextPageOffset;
-		}
-	}
-
-	// A nullopt in return means that there is no page which contains this type of schema in the DB
-	optional<std::streamoff> lookForFirstPage(const std::string& schemaName)
-	{
-		auto it = firstPageOffsetMap_.find(schemaName);
-
-		if(it != firstPageOffsetMap_.end())
-		{
-			return it->second;
-		}
-		else
-		{
-
-			// If there is no page in file, we have no chance to find what we're looking for
-			pgReader_.rewind();
-			if(pgReader_.eof()) return {};
-
-			std::streamoff offset = 0;
-
-			while(true)
-			{
-				DiskPageHeader<endian> header = pgReader_.readPageHeader(offset);
-				if(header.getSchemaName() == schemaName)
-				{
-					firstPageOffsetMap_.insert({schemaName, offset});
-					return offset;
-				}
-
-				offset += header.getRawPageSize();
-				if(offset >= pgReader_.getFileSize())
-				{
-					return {};
-				}
-			}
 		}
 	}
 
