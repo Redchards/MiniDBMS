@@ -44,7 +44,7 @@ public:
 	{}
 	
 	template<class TString, class = void>
-	constexpr ConstString(const TString& other) noexcept : size_(other.size()), cstr_(other.data())
+	explicit constexpr ConstString(const TString& other) noexcept : size_(other.size()), cstr_(other.data())
 	{}
 
 	constexpr iterator begin() noexcept { return { *this, 0 }; }

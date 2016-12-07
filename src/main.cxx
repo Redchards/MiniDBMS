@@ -186,7 +186,7 @@ int main()
 	vecTst.insert(vecTst.end(), blip.begin(), blip.end());
 	vecTst.push_back(16);vecTst.push_back(2);vecTst.push_back(7);vecTst.push_back(224);
 	for(auto byte : vecTst){std::cout << byte << " ";}
-	std::cout << DbEntry<Endianness::big, PageType::ReadOnly>{schList[0], vecTst}.toString() << std::endl;
+	std::cout << DbEntry<Endianness::big>{schList[0], vecTst}.toString() << std::endl;
 
 	bool end = false;
 	auto schemaUsed = schList[2];
@@ -230,8 +230,18 @@ int main()
 	std::cout << "Data suze : " << h.getData().size() << std::endl;
 		size_type count = 0;
 
-	DbSystem<usedEndianness> system("db", "db.sch");
+	DbSystem<usedEndianness> system("db", "db.sch", 2);
+	auto iter = system.getIterator("Runner");
+	while(iter != system.endIterator("Runner"))
+	{
+		std::cout << (*iter).toString() << std::endl;
 
+		++iter;
+	}
+
+	system.updateWhen("Runner", "Name", "Norbert", [](const auto& entry){  return entry.template getAs<std::string>("Name") == "4";});
+	system.removeWhen("Runner", [](const auto& entry){ std::cout << "Bouh : " << entry.template getAs<std::string>("Name") << std::endl; return entry.template getAs<size_type>("Number") == 5;});
+	// std::cout << (*iter).toString() << std::endl;
 	while(!end)
 	{
 		char ans;
@@ -319,12 +329,12 @@ int main()
 					//std::cout << std::boolalpha << h.add(newEntry) << std::endl;
 					//std::cout << newEntry.toString() << std::endl;
 
-			DbEntry<usedEndianness, PageType::Writable> testy{schemaUsed, data};
+			DbEntry<usedEndianness> testy{schemaUsed, data};
 
 			std::cout << "Prenom : " << testy.getAs<std::string>(1) << std::endl;
 			testy.setAs<std::string>("Surname", "Bijour");
 			std::cout << "Prenom : " << testy.getAs<std::string>(1) << std::endl;
-			system.add(DbEntry<usedEndianness, PageType::ReadOnly>{schemaUsed, data});
+			system.add(DbEntry<usedEndianness>{schemaUsed, data});
 			
 
 			++count;

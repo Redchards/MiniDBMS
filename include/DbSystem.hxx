@@ -13,6 +13,90 @@
 #include <vector>
 
 template<Endianness endian>
+class DbSystem;
+
+template<Endianness endian>
+class DbIterator
+{
+
+friend class DbSystem<endian>;
+
+public:
+	DbIterator(BufferManager<endian>& bufferManager, const DbSchema& schema)
+	: bufferManager_{bufferManager},
+	  schema_{schema},
+	  pageHandle_{},
+	  currentEntryIndex_{0}
+	{
+		pageHandle_ = bufferManager_.template requestFirstPage<PageType::Writable>(schema.getName());
+	}
+
+	DbEntry<endian> operator*() noexcept
+	{
+		auto dataStart = pageHandle_.get()->getData().begin() + (currentEntryIndex_ * schema_.getDataSize());
+		std::vector<uint8_t> tmp(dataStart, dataStart + schema_.getDataSize());
+		return {schema_, tmp};
+	}
+
+	DiskPage<endian>& getPage() noexcept
+	{
+		return *pageHandle_.get();
+	}
+
+	size_type getCurrentIndex() const noexcept
+	{
+		return currentEntryIndex_;
+	}
+
+	DbIterator& operator++() 
+	{
+		if(pageHandle_)
+		{
+			do
+			{
+				++currentEntryIndex_;
+			
+				if(currentEntryIndex_ >= pageHandle_.get()->getPageSize())
+				{
+					pageHandle_ = bufferManager_.template requestNextPage<PageType::Writable>(*pageHandle_.get());
+					currentEntryIndex_ = 0;
+				}
+			} while(pageHandle_ && pageHandle_.get()->isFree(currentEntryIndex_));
+		}
+
+		return *this;
+	}
+
+	bool operator==(const DbIterator<endian>& other)
+	{
+		return ((&bufferManager_ == &other.bufferManager_)
+			&& (&schema_ == &other.schema_)
+			&& (pageHandle_ == other.pageHandle_)
+			&& (currentEntryIndex_ == other.currentEntryIndex_));
+	}
+
+	bool operator!=(const DbIterator<endian>& other)
+	{
+		return !(*this == other);
+	}
+
+private:
+
+	// The "end" constructor, used by the DbSystem to create the end iterator
+	DbIterator(BufferManager<endian>& bufferManager, const DbSchema& schema, bool)
+	: bufferManager_{bufferManager},
+	  schema_{schema},
+	  pageHandle_{},
+	  currentEntryIndex_{0}
+	{}
+
+	BufferManager<endian>& bufferManager_;
+	const DbSchema& schema_;
+	BufferedPageHandle<endian, PageType::Writable> pageHandle_;
+	size_type currentEntryIndex_;
+};
+
+template<Endianness endian>
 class DbSystem
 {
 	static constexpr size_type defaultPageSize = 512;
@@ -40,18 +124,31 @@ class DbSystem
 		std::cout << schemaList_.size() << std::endl;
 		for(const DbSchema& schema : schemaList_)
 		{
-			std::cout << "Heree" << std::endl;
 			auto offset = bufferManager_.lookForLastPage(schema.getName());
-			std::cout << "Heree" << std::endl;
 			if(offset)
 			{
-				std::cout << "add offset" << std::endl;
 				lastOffsetMap_.insert({schema.getName(), *offset});
 			}
 		}
 	}
 
-	optional<DbSchema&> getSchema(size_t index) const noexcept
+	~DbSystem()
+	{
+		FileValueWriter<endian> schemaWriter{schemaFile_};
+
+		for(auto& schema : schemaList_)
+		{
+    		auto serialData = DbSchemaSerializer<endian>::serialize(schema);
+			schemaWriter.write(serialData);
+		}
+	}
+
+	void addSchema(const DbSchema& newSchema) noexcept
+	{
+		schemaList_.push_back(newSchema);
+	}
+
+	optional<const DbSchema&> getSchema(size_type index) const noexcept
 	{
 		if(index >= schemaList_.size())
 		{
@@ -60,18 +157,17 @@ class DbSystem
 		return schemaList_.at(index);
 	}
 
-	optional<size_type> getSchemaIndex(std::string schemaName) const noexcept
+	optional<size_type> getSchemaIndex(const std::string& schemaName) const noexcept
 	{
 		auto it = schemaMapping_.find(schemaName);
 		if(it == schemaMapping_.end())
 		{
 			return {};
 		}
-		return *it;
+		return it->second;
 	}
 
-	template<PageType type>
-	void add(const DbEntry<endian, type>& entry)
+	void add(const DbEntry<endian>& entry)
 	{
 		// Make sure that the entry has a valid schema ?
 		auto freePageHandle = bufferManager_.template requestFreePage<PageType::Writable>(entry.getSchema());
@@ -81,14 +177,63 @@ class DbSystem
 		}
 		else
 		{
-			std::cout << "Add new " << std::endl;
 			addNewPage(entry);
+		}
+	}
+
+	DbIterator<endian> getIterator(const std::string& schemaName) noexcept
+	{
+		auto schemaIndex = getSchemaIndex(schemaName);
+		return {bufferManager_, *getSchema(*schemaIndex)};
+	}
+
+	DbIterator<endian> endIterator(const std::string& schemaName) noexcept
+	{
+		auto schemaIndex = getSchemaIndex(schemaName);
+		return {bufferManager_, *getSchema(*schemaIndex), true}; 
+	}
+
+	template<class T>
+	void updateWhen(const std::string& schemaName, const std::string& updatedField, T value, std::function<bool(DbEntry<endian>&)> pred)
+	{
+		auto it = getIterator(schemaName);
+
+		while(it != endIterator(schemaName))
+		{
+			auto entry = *it;
+
+			if(pred(entry))
+			{
+				entry.template setAs<T>(updatedField, value);
+				it.getPage().replace(it.getCurrentIndex(), entry);
+			}
+
+			++it;
+		}
+	}
+
+	void removeWhen(const std::string& schemaName, std::function<bool(DbEntry<endian>&)> pred)
+	{
+		auto it = getIterator(schemaName);
+
+		while(it != endIterator(schemaName))
+		{
+			auto entry =  *it;
+			std::cout << "Extra" << std::endl;
+			if(pred(entry))
+			{
+				std::cout << entry.toString() << std::endl;
+				it.getPage().remove(it.getCurrentIndex());
+			}
+			++it;
+
+			std::cout << "Nul" << std::endl;
 		}
 	}
 
 	private:
 
-	void addNewPage(const DbEntry<endian, PageType::ReadOnly>& entry)
+	void addNewPage(const DbEntry<endian>& entry)
 	{
 
 		DiskPage<endian> newPage{0, entry.getSchema(), pageSize_};

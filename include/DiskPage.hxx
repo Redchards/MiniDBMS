@@ -271,10 +271,12 @@ class DiskPage
 
 	void remove(size_type index) noexcept
 	{
-		std::cout << "remove : " << getIndex() << " : " << header_.getRawPageSize() << std::endl;
-		markDirty();
-		frameIndicators_[index] = false;
-		header_.incrementFreeSlotCount();
+		if(frameIndicators_[index] != false)
+		{
+			markDirty();
+			header_.incrementFreeSlotCount();
+			frameIndicators_[index] = false;
+		}
 	}
 
 	bool isFree(size_type index) const noexcept
@@ -282,8 +284,7 @@ class DiskPage
 		return !frameIndicators_[index];
 	}
 
-	template<PageType type>
-	bool add(const DbEntry<endian, type>& entry) noexcept
+	bool add(const DbEntry<endian>& entry) noexcept
 	{
 		auto freeIndex = findFreeIndex();
 		std::cout << "add : " << getIndex() << " : " << getFreeSlotCount() << std::endl;
@@ -300,8 +301,7 @@ class DiskPage
 		return false;
 	}
 
-	template<PageType type>
-	void replace(size_type index, const DbEntry<endian, type>& entry) noexcept
+	void replace(size_type index, const DbEntry<endian>& entry) noexcept
 	{
 		Ensures(entry.getSchema().getName() == getSchemaName());
 

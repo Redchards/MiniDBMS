@@ -41,6 +41,9 @@ public:
 	{
 		BufferManager<endian>* manager;
 		typename BufferManager<endian>::PageIndex pageId;
+
+		friend bool operator==(HandleType lhs, HandleType rhs);
+		friend bool operator!=(HandleType lhs, HandleType rhs);
 	};
 
 	static HandleType construct(decltype(std::declval<HandleType>().manager) manager, decltype(std::declval<HandleType>().pageId) pageId) noexcept 
@@ -61,6 +64,18 @@ public:
 		}
 	}  
 };
+
+template<Endianness endian, PageType type>
+bool operator==(typename BufferedPageStrategy<endian, type>::HandleType lhs, typename BufferedPageStrategy<endian, type>::HandleType rhs)
+{
+	return (lhs.manager == rhs.manager) && (lhs.pageId == rhs.pageId);
+}
+
+template<Endianness endian, PageType type>
+bool operator!=(typename BufferedPageStrategy<endian, type>::HandleType lhs, typename BufferedPageStrategy<endian, type>::HandleType rhs)
+{
+	return !(lhs == rhs);
+}
 
 template<Endianness endian>
 class BufferManager;
@@ -162,6 +177,7 @@ class BufferManager
 		{
 			if(descriptor.page.isDirty())
 			{
+				std::cout << "Write " << std::endl;
 				pgWriter_.writePage(descriptor.page, descriptor.offset);
 			}
 		}
@@ -279,17 +295,50 @@ class BufferManager
 	}
 
 	template<PageType type>
+	BufferedPageHandle<endian, type> requestFirstPage(const std::string& schemaName)
+	{
+		auto offset = firstPageOffsetMap_.find(schemaName);
+
+		using HandleType = BufferedPageHandle<endian, type>;
+
+		if(offset != firstPageOffsetMap_.end())
+		{
+			auto pagePosition = bufferPagePosition_.find(offset->second);
+
+			if(pagePosition != bufferPagePosition_.end())
+			{
+				return HandleType::create(this, bufferPool_[pagePosition->second].page.getIndex());
+			}
+
+			return HandleType::create(this, fetchNewPage(offset->second).page.getIndex());
+		}
+		else
+		{
+			auto offset = lookForFirstPage(schemaName);
+
+			if(offset)
+			{
+				return HandleType::create(this, fetchNewPage(*offset).page.getIndex());
+			}
+		}
+
+		return {};
+	
+	}
+
+	template<PageType type>
 	BufferedPageHandle<endian, type> requestNextPage(const DiskPage<endian>& page)
 	{
+		// We do not have a next page, return a void handle.
+		if(page.getNextPageOffset() == 0) return {};
 		auto pagePosition = bufferPagePosition_.find(page.getNextPageOffset());
 
 		using HandleType = BufferedPageHandle<endian, type>;
 
 		if(pagePosition != bufferPagePosition_.end())
 		{
-			return HandleType::create(this, pagePosition->page);
+			return HandleType::create(this, bufferPool_[pagePosition->second].page.getIndex());
 		}
-
 		return HandleType::create(this, fetchNewPage(page.getNextPageOffset()).page.getIndex());
 	}
 

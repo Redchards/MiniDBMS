@@ -37,6 +37,9 @@ class DbSchema
 	  dataSize_{computeDataSize()}
 	{}
 
+	DbSchema(const DbSchema&) = default;
+	DbSchema(DbSchema&&) = default;
+
 	
 	const std::string& getName() const noexcept
 	{
@@ -104,7 +107,8 @@ class DbSchema
 		});
 
 		if(it == internal_.end()) return {};
-		return std::distance(it, internal_.begin());
+
+		return std::distance(internal_.begin(), it);
 		
 	}
 

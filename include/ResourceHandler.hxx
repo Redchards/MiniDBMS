@@ -127,22 +127,22 @@ public:
 	}
 
 	template<class T>
-	friend bool operator<(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator<(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 	template<class T>
-	friend bool operator>(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator>(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 	template<class T>
-	friend bool operator<=(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator<=(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 	template<class T>
-	friend bool operator>=(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator>=(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 	template<class T>
-	friend bool operator==(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator==(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 	template<class T>
-	friend bool operator!=(ResourceHandler<T>& lhs, ResourceHandler<T>& rhs);
+	friend bool operator!=(const ResourceHandler<T>& lhs, const ResourceHandler<T>& rhs);
 
 
 private:

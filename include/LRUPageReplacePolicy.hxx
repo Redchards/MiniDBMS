@@ -43,6 +43,10 @@ class LRUPageReplacePolicy : public PageReplacePolicy<endian>
 			{
 				candidateQueue_.erase(candidateQueue_.begin() + *position);
 				queuePagePosition_[pageId] = {};
+				for(auto& pos : queuePagePosition_)
+				{
+					if(pos && (*pos > queuePagePosition_[pageId])) pos = pos - 1;
+				}
 			}
 		}
 	}
